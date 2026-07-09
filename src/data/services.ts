@@ -42,19 +42,44 @@ export const whyChooseItems: WhyChooseItem[] = [
   },
 ];
 
+export const rentalBenefitItems = [
+  {
+    id: "insurance",
+    title: "Car Insurance",
+    description:
+      "Travel safely and Drive with confidence – we handle all risks on our own. All of our cars have valid insurance policies.",
+    icon: "trust",
+  },
+  {
+    id: "assistance",
+    title: "Assistance on the Road",
+    description:
+      "Something happened on the road? Don't hesitate to contact us and our team will come to help you along the way.",
+    icon: "service",
+  },
+  {
+    id: "best-cost",
+    title: "Best Cost",
+    description:
+      "Never overpay for your rental again - we offer the best cost in Northern Territory, every time and any season.",
+    icon: "price",
+  },
+] as const;
+
 export const siteConfig = {
   name: "Everest Car Rental",
   shortName: "Everest Rental",
   tagline: "Hassle-free car rental in Darwin",
   phone: "0411 528 466",
   email: "reservations@everestcarrental.com",
-  address: "482 Stuart Highway, Winnellie NT 0820",
-  mapQuery: "482 Stuart Highway, Winnellie NT 0820",
+  address: "482 Stuart Hwy Winnellie NT 0820",
+  mapQuery: "482 Stuart Hwy Winnellie NT 0820",
+  location: "482 Stuart Hwy Winnellie NT 0820",
   hours: {
-    weekdays: "Mon–Fri: 8:00 AM – 5:30 PM",
-    saturday: "Sat: 8:00 AM – 2:00 PM",
+    weekdays: "Mon–Fri: 8:00 AM – 5:00 PM",
+    saturday: "Sat: 8:00 AM – 5:00 PM",
     sunday: "Sun: Closed",
-    utilityBar: "Mon–Sat 8:00 AM – 6:00 PM",
+    utilityBar: "Mon–Fri 8:00 AM – 5:00 PM",
   },
   social: {
     facebook: "https://www.facebook.com/profile.php?id=100084775911939",
@@ -64,11 +89,14 @@ export const siteConfig = {
   logo: {
     horizontal: "/images/everest-logo-horizontal.png",
     stacked: "/images/everest-logo-stacked.png",
+    footer: "/images/everest-logo-footer.png",
     favicon: "/images/everest-favicon-32.png",
     appleTouchIcon: "/images/everest-favicon-192.png",
-    horizontalWidth: 945,
-    horizontalHeight: 140,
+    horizontalWidth: 370,
+    horizontalHeight: 52,
     stackedWidth: 1024,
     stackedHeight: 1024,
+    footerWidth: 592,
+    footerHeight: 83,
   },
 };

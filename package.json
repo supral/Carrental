@@ -13,7 +13,8 @@
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
-    "test:reservation-concurrency": "tsx scripts/test-reservation-concurrency.ts"
+    "test:reservation-concurrency": "tsx scripts/test-reservation-concurrency.ts",
+    "db:seed-rental-fleet": "tsx scripts/seed-everest-rental-fleet.ts"
   },
   "prisma": {
     "seed": "npx tsx prisma/seed.ts"

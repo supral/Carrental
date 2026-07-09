@@ -75,7 +75,7 @@ export default function StickyActionButtons() {
             </DialogDescription>
           </DialogHeader>
           <div className="rounded-xl border border-gray-200 bg-gray-50 p-6 text-center">
-            <p className="text-sm font-medium text-gray-600">Darwin, NT</p>
+            <p className="text-sm font-medium text-gray-600">{siteConfig.location}</p>
             <p className="mt-2 text-3xl font-bold tracking-tight text-primary">{siteConfig.phone}</p>
             <p className="mt-3 text-xs text-gray-500">{siteConfig.hours.weekdays}</p>
             <p className="mt-4 text-sm text-gray-600">

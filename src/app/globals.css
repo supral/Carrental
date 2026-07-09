@@ -102,3 +102,41 @@ html {
 .rental-time-input::-webkit-date-and-time-value {
   text-align: left;
 }
+
+@keyframes our-cars-scroll {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+.our-cars-track {
+  animation: our-cars-scroll var(--our-cars-duration, 40s) linear infinite;
+}
+
+.our-cars-track:hover {
+  animation-play-state: paused;
+}
+
+.our-cars-viewport {
+  container-type: inline-size;
+}
+
+.our-car-card {
+  width: 100cqw;
+}
+
+@container (min-width: 768px) {
+  .our-car-card {
+    width: calc((100cqw - 1.25rem) / 2);
+  }
+}
+
+@container (min-width: 1024px) {
+  .our-car-card {
+    width: calc((100cqw - 2.5rem) / 3);
+  }
+}

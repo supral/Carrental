@@ -35,10 +35,8 @@ export default function Header() {
   return (
     <header
       className={cn(
-        "sticky top-0 z-50 transition-all duration-300",
-        scrolled
-          ? "border-b border-gray-200/80 bg-white/95 shadow-md shadow-gray-900/5 backdrop-blur-md"
-          : "border-b border-transparent bg-white"
+        "relative z-40 border-b border-gray-200/80 bg-white transition-all duration-300",
+        scrolled && "shadow-sm"
       )}
     >
       <TopBar />

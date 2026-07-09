@@ -13,6 +13,7 @@ import {
   parseOptionalInt,
   parseSaleDescription,
 } from "@/lib/vehicles/sale-vehicle-fields";
+import { siteConfig } from "@/data/services";
 import {
   IMPORT_PLACEHOLDER_IMAGE,
   type MappedImportVehicle,
@@ -128,7 +129,7 @@ export function mapImportRow(
     fields.location.trim() ||
     parsedDescription.location ||
     options.defaultLocation ||
-    "Darwin, NT";
+    siteConfig.location;
 
   const bodyType = mapSaleBodyType(
     fields.bodyType,

@@ -15,6 +15,6 @@ export function getSiteMapDirectionsUrl(): string {
 
 export const dealershipLocation = {
   id: "everest-car-rental",
-  label: siteConfig.name,
+  label: siteConfig.shortName,
   address: siteConfig.address,
 } as const;

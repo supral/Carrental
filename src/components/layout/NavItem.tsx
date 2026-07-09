@@ -21,7 +21,7 @@ export default function NavItem({ href, label, pathname, search, onClick, classN
       href={href}
       onClick={onClick}
       className={cn(
-        "relative inline-block px-1 py-2 text-[15px] font-medium lg:text-base",
+        "relative inline-block px-1 py-1 text-sm font-medium lg:text-[15px]",
         active ? "font-semibold text-primary" : "text-gray-700",
         className
       )}

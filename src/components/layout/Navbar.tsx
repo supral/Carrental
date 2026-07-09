@@ -15,7 +15,7 @@ export default function Navbar({ scrolled, onOpenMobile, children }: NavbarProps
     <div
       className={cn(
         "mx-auto flex max-w-[1440px] items-center justify-between gap-4 px-4 transition-all duration-300 lg:gap-6 lg:px-8",
-        scrolled ? "h-32" : "h-32 lg:h-36"
+        scrolled ? "h-16" : "h-16 lg:h-[4.5rem]"
       )}
     >
       <div className="flex shrink-0 items-center">
@@ -28,7 +28,7 @@ export default function Navbar({ scrolled, onOpenMobile, children }: NavbarProps
         <ActionButtons className="hidden lg:flex" />
         <button
           type="button"
-          className="inline-flex h-11 w-11 items-center justify-center rounded-full text-gray-700 xl:hidden"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-full text-gray-700 xl:hidden"
           onClick={onOpenMobile}
           aria-label="Open menu"
         >

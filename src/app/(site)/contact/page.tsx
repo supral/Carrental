@@ -8,7 +8,7 @@ import { videoPanel } from "@/lib/video-page-styles";
 
 export const metadata: Metadata = {
   title: "Contact Us",
-  description: `Get in touch with ${siteConfig.name}. Visit us in Darwin or call ${siteConfig.phone}.`,
+  description: `Get in touch with ${siteConfig.name}. Visit us at ${siteConfig.location} or call ${siteConfig.phone}.`,
 };
 
 export default async function ContactPage({

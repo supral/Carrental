@@ -43,6 +43,8 @@ interface RentalDateTimePickerProps {
   timeError?: string;
   minDate?: string;
   minTime?: string;
+  inline?: boolean;
+  className?: string;
   onDateChange: (value: string) => void;
   onTimeChange: (value: string) => void;
 }
@@ -63,6 +65,8 @@ export default function RentalDateTimePicker({
   timeError,
   minDate,
   minTime,
+  inline = false,
+  className,
   onDateChange,
   onTimeChange,
 }: RentalDateTimePickerProps) {
@@ -112,11 +116,7 @@ export default function RentalDateTimePicker({
     setCalendarOpen(false);
   };
 
-  return (
-    <div>
-      <span className="mb-1.5 block text-sm font-medium text-gray-800">{label}</span>
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_1fr]">
+  const dateField = (
         <div>
           <span className="mb-1 block text-xs text-gray-500">Date</span>
           <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
@@ -196,7 +196,9 @@ export default function RentalDateTimePicker({
           </Popover>
           {dateError && <p className="mt-1 text-xs text-primary">{dateError}</p>}
         </div>
+  );
 
+  const timeField = (
         <div>
           <span className="mb-1 block text-xs text-gray-500">Time</span>
           <Select
@@ -222,6 +224,24 @@ export default function RentalDateTimePicker({
           </Select>
           {timeError && <p className="mt-1 text-xs text-primary">{timeError}</p>}
         </div>
+  );
+
+  if (inline) {
+    return (
+      <>
+        {dateField}
+        {timeField}
+      </>
+    );
+  }
+
+  return (
+    <div className={className}>
+      <span className="mb-1.5 block text-sm font-medium text-gray-800">{label}</span>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_1fr]">
+        {dateField}
+        {timeField}
       </div>
     </div>
   );

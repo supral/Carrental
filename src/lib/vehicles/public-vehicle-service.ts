@@ -388,3 +388,73 @@ export async function getPublicFilterOptions(listingPurpose: "sale" | "rental" =
     },
   } satisfies FilterOptions;
 }
+
+const rentalFleetSelect = {
+  id: true,
+  make: true,
+  model: true,
+  year: true,
+  price: true,
+  mileage: true,
+  fuelType: true,
+  transmission: true,
+  bodyType: true,
+  condition: true,
+  color: true,
+  doors: true,
+  seats: true,
+  driveType: true,
+  location: true,
+  totalUnits: true,
+  availableUnits: true,
+  vehicleType: { select: { name: true } },
+  images: { orderBy: { order: "asc" as const }, take: 1, select: { url: true } },
+} satisfies Prisma.VehicleSelect;
+
+type RentalFleetRow = Prisma.VehicleGetPayload<{ select: typeof rentalFleetSelect }>;
+
+function mapRentalFleetRow(vehicle: RentalFleetRow): Vehicle {
+  const image = vehicle.images[0]?.url || "/images/fleet/mg-zs.png";
+
+  return {
+    id: vehicle.id,
+    make: vehicle.make,
+    model: vehicle.model,
+    year: vehicle.year,
+    price: vehicle.price,
+    mileage: vehicle.mileage,
+    fuelType: vehicle.fuelType as Vehicle["fuelType"],
+    transmission: vehicle.transmission as Vehicle["transmission"],
+    bodyType: vehicle.bodyType as Vehicle["bodyType"],
+    category: "cars",
+    listingPurpose: "rental",
+    condition: vehicle.condition as Vehicle["condition"],
+    color: vehicle.color || "White",
+    doors: vehicle.doors ?? 4,
+    seats: vehicle.seats ?? 5,
+    driveType: (vehicle.driveType || "AWD") as Vehicle["driveType"],
+    location: vehicle.location,
+    dealer: { name: "Everest Car Rental", phone: "0411 528 466" },
+    image,
+    images: image ? [image] : [],
+    description: "",
+    features: [],
+    totalUnits: vehicle.totalUnits ?? 1,
+    availableUnits: vehicle.availableUnits ?? vehicle.totalUnits ?? 1,
+    vehicleTypeName: vehicle.vehicleType?.name,
+  };
+}
+
+export async function getAvailableRentalFleet() {
+  const rows = await prisma.vehicle.findMany({
+    where: {
+      status: VehicleStatus.ACTIVE,
+      listingPurpose: ListingPurpose.RENTAL,
+      availableUnits: { gt: 0 },
+    },
+    select: rentalFleetSelect,
+    orderBy: { price: "asc" },
+  });
+
+  return rows.map(mapRentalFleetRow);
+}

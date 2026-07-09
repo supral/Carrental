@@ -6,6 +6,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { VehicleCategory, VehicleStatus } from "@prisma/client";
 import { createVehicle } from "@/lib/admin/actions";
+import { siteConfig } from "@/data/services";
 import {
   createVehicleSchema,
   collectImageUrls,
@@ -190,7 +191,7 @@ export default function VehicleForm({
       doors: "",
       seats: "",
       driveType: "",
-      location: "Darwin, NT",
+      location: siteConfig.location,
       status: canPublishLive ? VehicleStatus.ACTIVE : VehicleStatus.PENDING,
       featured: false,
       totalUnits: 1,
@@ -411,7 +412,7 @@ export default function VehicleForm({
                 <Input placeholder="White" {...register("color")} />
               </Field>
               <Field label="Location" error={errors.location?.message} className="sm:col-span-2">
-                <Input placeholder="Winnellie, Darwin – NT" {...register("location")} />
+                <Input placeholder={siteConfig.location} {...register("location")} />
               </Field>
             </div>
           </FieldGroup>

@@ -55,18 +55,37 @@ function BrandLogo({
   className,
   priority = false,
 }: {
-  layout?: "stacked" | "horizontal";
+  layout?: "stacked" | "horizontal" | "footer";
   className?: string;
   priority?: boolean;
 }) {
-  const isStacked = layout === "stacked";
+  const src =
+    layout === "footer"
+      ? siteConfig.logo.footer
+      : layout === "horizontal"
+        ? siteConfig.logo.horizontal
+        : siteConfig.logo.stacked;
+
+  const width =
+    layout === "footer"
+      ? siteConfig.logo.footerWidth
+      : layout === "horizontal"
+        ? siteConfig.logo.horizontalWidth
+        : siteConfig.logo.stackedWidth;
+
+  const height =
+    layout === "footer"
+      ? siteConfig.logo.footerHeight
+      : layout === "horizontal"
+        ? siteConfig.logo.horizontalHeight
+        : siteConfig.logo.stackedHeight;
 
   return (
     <Image
-      src={isStacked ? siteConfig.logo.stacked : siteConfig.logo.horizontal}
+      src={src}
       alt={siteConfig.name}
-      width={isStacked ? siteConfig.logo.stackedWidth : siteConfig.logo.horizontalWidth}
-      height={isStacked ? siteConfig.logo.stackedHeight : siteConfig.logo.horizontalHeight}
+      width={width}
+      height={height}
       className={cn("w-auto object-contain", className)}
       priority={priority}
     />
@@ -116,7 +135,7 @@ export default function Logo({
   if (variant === "header") {
     return (
       <HomeLogoLink className={cn("inline-flex shrink-0 items-center", className)}>
-        <BrandLogo layout="stacked" className="h-24 w-24 sm:h-28 sm:w-28 lg:h-32 lg:w-32" priority />
+        <BrandLogo layout="horizontal" className="h-8 w-auto sm:h-9 lg:h-10" priority />
       </HomeLogoLink>
     );
   }
@@ -124,9 +143,9 @@ export default function Logo({
   if (isFooter) {
     return (
       <HomeLogoLink className={cn("inline-flex flex-col items-start", className)}>
-        <BrandLogo layout="stacked" className="h-36 w-36 sm:h-40 sm:w-40" priority />
+        <BrandLogo layout="footer" className="h-10 w-auto sm:h-11" priority />
         {showTagline && (
-          <p className="mt-3 max-w-xs text-sm leading-relaxed text-gray-400">{siteConfig.tagline}</p>
+          <p className="mt-3 max-w-xs text-sm leading-relaxed text-blue-200/70">{siteConfig.tagline}</p>
         )}
       </HomeLogoLink>
     );

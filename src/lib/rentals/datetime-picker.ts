@@ -1,7 +1,7 @@
 import { format, parseISO } from "date-fns";
 
-export const RENTAL_TIME_SLOTS = Array.from({ length: 12 }, (_, index) => {
-  const hour = 7 + index;
+export const RENTAL_TIME_SLOTS = Array.from({ length: 10 }, (_, index) => {
+  const hour = 8 + index;
   return `${String(hour).padStart(2, "0")}:00`;
 });
 

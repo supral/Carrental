@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useSession } from "next-auth/react";
-import { Bell, User } from "lucide-react";
+import { Bell, Phone } from "lucide-react";
+import { siteConfig } from "@/data/services";
+import ContactPhoneTrigger from "@/components/contact/ContactPhoneTrigger";
 import { cn } from "@/lib/utils";
 
 interface ActionButtonsProps {
@@ -38,11 +39,6 @@ function IconButton({
 }
 
 export default function ActionButtons({ className, compact = false }: ActionButtonsProps) {
-  const { data: session } = useSession();
-
-  const profileHref = session?.user ? "/admin" : "/admin/login";
-  const profileLabel = session?.user ? "Profile" : "Login";
-
   return (
     <div className={cn("flex items-center gap-1.5 xl:gap-2", className)}>
       {!compact && (
@@ -51,13 +47,12 @@ export default function ActionButtons({ className, compact = false }: ActionButt
         </IconButton>
       )}
 
-      <Link
-        href={profileHref}
-        className="inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground shadow-sm"
-      >
-        <User className="h-4 w-4" />
-        {profileLabel}
-      </Link>
+      <ContactPhoneTrigger phone={siteConfig.phone}>
+        <span className="inline-flex items-center gap-2 rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm sm:text-sm sm:px-4 sm:py-2">
+          <Phone className="h-4 w-4 shrink-0" />
+          {siteConfig.phone}
+        </span>
+      </ContactPhoneTrigger>
     </div>
   );
 }

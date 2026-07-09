@@ -9,6 +9,11 @@ export const mainNavLinks: NavLink[] = [
   { href: "/contact", label: "Contact" },
 ];
 
+export const footerNavLinks: NavLink[] = [
+  ...mainNavLinks,
+  { href: "/privacy-policy", label: "Privacy Policy" },
+];
+
 export function isNavLinkActive(pathname: string, href: string, search?: string): boolean {
   const [path, query] = href.split("?");
   if (path === "/") return pathname === "/";

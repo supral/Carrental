@@ -32,11 +32,15 @@ interface SocialLinksProps {
   className?: string;
   iconClassName?: string;
   linkClassName?: string;
+  platforms?: SocialPlatform[];
 }
 
-export default function SocialLinks({ className, iconClassName = "h-3.5 w-3.5", linkClassName }: SocialLinksProps) {
-  const platforms: SocialPlatform[] = ["facebook", "instagram", "linkedin"];
-
+export default function SocialLinks({
+  className,
+  iconClassName = "h-3.5 w-3.5",
+  linkClassName,
+  platforms = ["facebook", "instagram", "linkedin"],
+}: SocialLinksProps) {
   return (
     <div className={cn("flex items-center gap-2", className)}>
       {platforms.map((platform) => (

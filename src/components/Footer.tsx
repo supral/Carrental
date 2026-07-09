@@ -1,15 +1,9 @@
 import Link from "next/link";
 import Logo from "@/components/Logo";
 import { siteConfig } from "@/data/services";
-import { mainNavLinks } from "@/data/navigation";
+import { footerNavLinks } from "@/data/navigation";
 import ContactEmailTrigger from "@/components/contact/ContactEmailTrigger";
 import ContactPhoneTrigger from "@/components/contact/ContactPhoneTrigger";
-
-const supportLinks = [
-  { href: "/car-rental", label: "Browse Rentals" },
-  { href: "/my-bookings", label: "My Bookings" },
-  { href: "/contact", label: "Contact Us" },
-];
 
 export default function Footer() {
   return (
@@ -19,7 +13,7 @@ export default function Footer() {
           <div className="space-y-4">
             <Logo variant="footer" />
             <p className="max-w-sm text-sm leading-relaxed text-blue-200/70">
-              Everest Rental is a Darwin-based car rental company offering a wide range of vehicles at
+              Everest Rental is a Winnellie-based car rental company offering a wide range of vehicles at
               competitive prices.
             </p>
           </div>
@@ -29,7 +23,7 @@ export default function Footer() {
               Navigation
             </h3>
             <ul className="space-y-2.5">
-              {mainNavLinks.map((link) => (
+              {footerNavLinks.map((link) => (
                 <li key={link.href}>
                   <Link href={link.href} className="text-sm transition-colors hover:text-brand-blue-light">
                     {link.label}
@@ -41,16 +35,12 @@ export default function Footer() {
 
           <div>
             <h3 className="mb-4 text-sm font-semibold uppercase tracking-wider text-white">
-              Support
+              Daily Operation Time
             </h3>
-            <ul className="space-y-2.5">
-              {supportLinks.map((link) => (
-                <li key={link.href}>
-                  <Link href={link.href} className="text-sm transition-colors hover:text-brand-blue-light">
-                    {link.label}
-                  </Link>
-                </li>
-              ))}
+            <ul className="space-y-2.5 text-sm">
+              <li>{siteConfig.hours.weekdays}</li>
+              <li>{siteConfig.hours.saturday}</li>
+              <li>{siteConfig.hours.sunday}</li>
             </ul>
           </div>
 

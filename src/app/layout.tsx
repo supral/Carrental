@@ -16,7 +16,7 @@ export const metadata: Metadata = {
     template: `%s | ${siteConfig.name}`,
   },
   description:
-    "Everest Car Rental offers a wide range of vehicles for rent in Darwin and the Northern Territory at competitive prices.",
+    `Everest Car Rental offers a wide range of vehicles for rent at ${siteConfig.location} and across the Northern Territory at competitive prices.`,
   keywords: [
     "car rental Darwin",
     "rent a car Darwin",
@@ -26,7 +26,7 @@ export const metadata: Metadata = {
   ],
   openGraph: {
     title: `${siteConfig.name} – ${siteConfig.tagline}`,
-    description: "Hassle-free car rental in Darwin, Northern Territory.",
+    description: `Hassle-free car rental at ${siteConfig.location}.`,
     type: "website",
     locale: "en_AU",
     siteName: siteConfig.name,

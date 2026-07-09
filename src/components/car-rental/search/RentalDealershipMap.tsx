@@ -24,7 +24,7 @@ export default function RentalDealershipMap({
   return (
     <div className="overflow-hidden rounded-[18px] border border-gray-200 bg-white shadow-sm">
       <div className="border-b border-gray-100 bg-gradient-to-r from-gray-50 to-white px-4 py-4 sm:px-5">
-        <p className="text-sm font-semibold text-gray-900">Dealership location</p>
+        <p className="text-sm font-semibold text-gray-900">Our location</p>
         <p className="mt-1 text-sm text-gray-600">{dealershipLocation.address}</p>
         <p className="mt-1 text-xs text-gray-500">Same map as on our homepage — use it for pickup and/or drop-off.</p>
       </div>

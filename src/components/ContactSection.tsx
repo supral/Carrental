@@ -10,11 +10,10 @@ export default function ContactSection() {
         <div className="grid grid-cols-1 gap-8 lg:grid-cols-2 lg:gap-12 xl:gap-16 lg:items-stretch">
           <div>
             <h2 className="text-2xl sm:text-3xl lg:text-4xl font-bold mb-3 sm:mb-4">
-              Visit Us in Darwin
+              Visit Us
             </h2>
             <p className="text-gray-300 text-base sm:text-lg mb-6 sm:mb-8 max-w-xl">
-              Come see us at our showroom on Stuart Highway. We&apos;re here to help you find your
-              perfect vehicle.
+              {siteConfig.location}. We&apos;re here to help with your rental.
             </p>
 
             <div className="space-y-4 sm:space-y-5">
