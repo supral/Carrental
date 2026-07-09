@@ -1,0 +1,659 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN
+  DEALER_MANAGER
+  CONTENT_MANAGER
+  SUPPORT_AGENT
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+}
+
+enum VehicleStatus {
+  DRAFT
+  PENDING
+  ACTIVE
+  REJECTED
+  SOLD
+}
+
+/// Transactional availability for rent/purchase checkout (separate from listing moderation `status`).
+enum VehicleInventoryStatus {
+  AVAILABLE
+  RESERVED
+  RENTED
+  SOLD
+}
+
+enum VehicleCategory {
+  CARS
+  CARAVANS
+  MOTORBIKES
+}
+
+enum ListingPurpose {
+  SALE
+  RENTAL
+}
+
+enum DealerStatus {
+  PENDING
+  APPROVED
+  SUSPENDED
+}
+
+enum LeadStatus {
+  NEW
+  ASSIGNED
+  CONTACTED
+  QUALIFIED
+  CLOSED
+  LOST
+}
+
+enum LeadType {
+  VEHICLE_ENQUIRY
+  CONTACT
+  REQUEST_PRICE
+  AUTO_PARTS
+  CAR_RENTAL
+  SERVICE_BOOKING
+}
+
+enum ContentStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum NotificationType {
+  APPROVAL_REQUEST
+  NEW_DEALER
+  NEW_LEAD
+  SALE_BOOKING
+  LISTING_APPROVED
+  LISTING_REJECTED
+  SYSTEM
+}
+
+enum RentalBookingStatus {
+  PENDING
+  RESERVED
+  CONFIRMED
+  ACTIVE
+  CANCELLED
+  COMPLETED
+}
+
+enum RentalPaymentStatus {
+  UNPAID
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum RentalOptionPriceType {
+  PER_RENTAL
+  PER_DAY
+}
+
+enum RentalOptionCategory {
+  INSURANCE
+  EXTRA
+  PROTECTION
+  ACCESSORY
+}
+
+enum TemplateFieldInputType {
+  TEXT
+  NUMBER
+  TEXTAREA
+  BOOLEAN
+}
+
+enum SaleBookingStatus {
+  PENDING
+  ACCEPTED
+  MEETING_SCHEDULED
+  DEAL_FINALIZED
+  PAID
+  COMPLETED
+  CANCELLED
+}
+
+enum SalePaymentStatus {
+  UNPAID
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum AuditAction {
+  LOGIN
+  LOGOUT
+  CREATE
+  UPDATE
+  DELETE
+  APPROVE
+  REJECT
+  SUSPEND
+  EXPORT
+}
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  name          String
+  passwordHash  String
+  role          Role       @default(SUPPORT_AGENT)
+  status        UserStatus @default(ACTIVE)
+  image         String?
+  phone         String?
+  dealerId      String?
+  dealer        Dealer?    @relation(fields: [dealerId], references: [id])
+  favorites     Favorite[]
+  savedSearches SavedSearch[]
+  leadsAssigned Lead[]     @relation("AssignedLeads")
+  auditLogs     AuditLog[]
+  notifications Notification[]
+  moderatorNotes ModeratorNote[]
+  vehiclesCreated Vehicle[] @relation("VehicleCreatedBy")
+  vehiclesReserved Vehicle[] @relation("VehicleReservedBy")
+  mediaAssets   MediaAsset[]
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  lastLoginAt   DateTime?
+
+  @@index([role])
+  @@index([status])
+}
+
+model Dealer {
+  id          String       @id @default(cuid())
+  name        String
+  slug        String       @unique
+  email       String       @unique
+  phone       String
+  address     String
+  description String?      @db.Text
+  tagline     String?
+  logo        String?
+  primaryColor String      @default("#dc2626")
+  verified    Boolean      @default(false)
+  status      DealerStatus @default(PENDING)
+  rating      Float        @default(0)
+  totalSales  Int          @default(0)
+  users       User[]
+  vehicles    Vehicle[]
+  leads       Lead[]
+  saleBookings SaleBooking[]
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  @@index([status])
+  @@index([slug])
+}
+
+model VehicleType {
+  id             String                 @id @default(cuid())
+  name           String                 @unique
+  description    String?
+  icon           String?
+  sortOrder      Int                    @default(0)
+  active         Boolean                @default(true)
+  templateFields VehicleTemplateField[]
+  vehicles       Vehicle[]
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+}
+
+model VehicleTemplateField {
+  id            String                 @id @default(cuid())
+  vehicleTypeId String
+  vehicleType   VehicleType            @relation(fields: [vehicleTypeId], references: [id], onDelete: Cascade)
+  name          String
+  inputType     TemplateFieldInputType @default(TEXT)
+  required      Boolean                @default(false)
+  sortOrder     Int                    @default(0)
+  group         String                 @default("Specifications")
+  defaultValue  String?
+  values        VehicleTemplateValue[]
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  @@index([vehicleTypeId])
+}
+
+model VehicleTemplateValue {
+  id              String               @id @default(cuid())
+  vehicleId       String
+  templateFieldId String
+  vehicle         Vehicle              @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  templateField   VehicleTemplateField @relation(fields: [templateFieldId], references: [id], onDelete: Cascade)
+  value           String?
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  @@unique([vehicleId, templateFieldId])
+  @@index([vehicleId])
+}
+
+model VehicleCustomField {
+  id        String                 @id @default(cuid())
+  vehicleId String
+  vehicle   Vehicle                @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  name      String
+  inputType TemplateFieldInputType @default(TEXT)
+  value     String?
+  sortOrder Int                    @default(0)
+  group     String                 @default("Vehicle Details")
+  createdAt DateTime               @default(now())
+  updatedAt DateTime               @updatedAt
+
+  @@index([vehicleId])
+}
+
+model RentalOption {
+  id               String                @id @default(cuid())
+  name             String
+  category         RentalOptionCategory
+  price            Int                   @default(0)
+  description      String?
+  active           Boolean               @default(true)
+  priceType        RentalOptionPriceType @default(PER_DAY)
+  supportsQuantity Boolean               @default(false)
+  maxQuantity      Int?
+  sortOrder        Int                   @default(0)
+  vehicleOptions   VehicleRentalOption[]
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+
+  @@index([active])
+  @@index([category])
+}
+
+model VehicleRentalOption {
+  id             String       @id @default(cuid())
+  vehicleId      String
+  rentalOptionId String
+  vehicle        Vehicle      @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  rentalOption   RentalOption @relation(fields: [rentalOptionId], references: [id], onDelete: Cascade)
+  enabled        Boolean      @default(true)
+  priceOverride  Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([vehicleId, rentalOptionId])
+  @@index([vehicleId])
+}
+
+model Vehicle {
+  id           String          @id @default(cuid())
+  title        String
+  vehicleNumber String?
+  make         String
+  model        String
+  year         Int
+  price        Int
+  mileage      Int
+  fuelType     String
+  transmission String
+  bodyType     String
+  vehicleTypeId String?
+  vehicleType  VehicleType?    @relation(fields: [vehicleTypeId], references: [id], onDelete: SetNull)
+  category     VehicleCategory @default(CARS)
+  listingPurpose ListingPurpose @default(SALE)
+  condition    String          @default("Used")
+  color        String?
+  doors        Int?
+  seats        Int?
+  driveType    String?
+  location     String          @default("Darwin, NT")
+  description  String          @default("") @db.Text
+  features     String[]        @default([])
+  details      Json?
+  status       VehicleStatus   @default(PENDING)
+  inventoryStatus VehicleInventoryStatus @default(AVAILABLE)
+  reservedByUserId String?
+  reservedBy     User?           @relation("VehicleReservedBy", fields: [reservedByUserId], references: [id], onDelete: SetNull)
+  reservationToken String?
+  reservationPurpose ListingPurpose?
+  reservationExpiresAt DateTime?
+  featured     Boolean         @default(false)
+  images       VehicleImage[]
+  dealerId     String
+  dealer       Dealer          @relation(fields: [dealerId], references: [id])
+  createdById  String?
+  createdBy    User?           @relation("VehicleCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  favorites    Favorite[]
+  leads        Lead[]
+  rentalBookings RentalBooking[]
+  saleBookings SaleBooking[]
+  moderatorNotes ModeratorNote[]
+  rentalAvailableFrom DateTime?
+  rentalAvailableTo   DateTime?
+  totalUnits          Int                 @default(1)
+  availableUnits      Int                 @default(1)
+  rentalOptions       Json?
+  templateValues      VehicleTemplateValue[]
+  customFields        VehicleCustomField[]
+  vehicleRentalOptions VehicleRentalOption[]
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  soldAt       DateTime?
+
+  seasonOfferId String?
+  seasonOffer   SeasonOffer? @relation(fields: [seasonOfferId], references: [id], onDelete: SetNull)
+
+  // Legacy cached fields (synced when assigning a template; used for queries)
+  isOnOffer       Boolean   @default(false)
+  offerType       String?
+  offerDiscountType String? @default("AMOUNT")
+  offerAmount     Decimal?  @db.Decimal(10, 2)
+  offerPercent    Decimal?  @db.Decimal(5, 2)
+  offerStartDate  DateTime?
+  offerEndDate    DateTime?
+  discountedPrice Decimal?  @db.Decimal(10, 2)
+
+  @@index([status])
+  @@index([seasonOfferId])
+  @@index([inventoryStatus])
+  @@index([reservationExpiresAt])
+  @@index([make, model])
+  @@index([dealerId])
+  @@index([category])
+  @@index([listingPurpose])
+  @@index([vehicleNumber])
+  @@index([vehicleTypeId])
+}
+
+model SeasonOffer {
+  id                String    @id @default(cuid())
+  name              String
+  offerType         String
+  offerDiscountType String    @default("AMOUNT")
+  offerAmount       Decimal?  @db.Decimal(10, 2)
+  offerPercent      Decimal?  @db.Decimal(5, 2)
+  offerStartDate    DateTime?
+  offerEndDate      DateTime?
+  isEnabled         Boolean   @default(true)
+  vehicles          Vehicle[]
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  @@index([isEnabled])
+}
+
+model RentalBooking {
+  id                   String              @id @default(cuid())
+  vehicleId            String
+  vehicle              Vehicle             @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  status               RentalBookingStatus @default(PENDING)
+  inventoryHeld        Boolean             @default(false)
+  pickupAddress        String
+  dropoffAddress       String
+  pickupAt             DateTime
+  dropoffAt            DateTime
+  customerName         String?
+  customerEmail        String?
+  customerPhone        String?
+  customerAddress      String?
+  customerZip          String?
+  customerDob          DateTime?
+  customerCountry      String?
+  drivingLicenceNumber String?
+  licencePhotoUrl      String?
+  notes                String?             @db.Text
+  rentalDays           Int                 @default(1)
+  baseAmountCents      Int                 @default(0)
+  extrasAmountCents    Int                 @default(0)
+  taxAmountCents       Int                 @default(0)
+  totalAmountCents     Int                 @default(0)
+  selectedOptions      Json?
+  currency             String              @default("aud")
+  paymentStatus        RentalPaymentStatus @default(UNPAID)
+  stripeCheckoutSessionId String?          @unique
+  stripePaymentIntentId   String?
+  paidAt               DateTime?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@index([vehicleId])
+  @@index([status])
+  @@index([pickupAt, dropoffAt])
+}
+
+model SaleBooking {
+  id                   String            @id @default(cuid())
+  vehicleId            String
+  vehicle              Vehicle           @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  dealerId             String
+  dealer               Dealer            @relation(fields: [dealerId], references: [id])
+  status               SaleBookingStatus @default(PENDING)
+  customerName         String
+  customerEmail        String
+  customerPhone        String
+  customerAddress      String?
+  customerMessage      String?           @db.Text
+  preferredContactTime String?
+  meetingScheduledAt   DateTime?
+  meetingLocation      String?
+  meetingNotes         String?           @db.Text
+  agreedPriceCents     Int?
+  paymentStatus        SalePaymentStatus @default(UNPAID)
+  paidAt               DateTime?
+  completedAt          DateTime?
+  createdAt            DateTime          @default(now())
+  updatedAt            DateTime          @updatedAt
+
+  @@index([vehicleId])
+  @@index([dealerId])
+  @@index([status])
+}
+
+model VehicleImage {
+  id        String   @id @default(cuid())
+  url       String
+  alt       String?
+  order     Int      @default(0)
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@index([vehicleId])
+}
+
+model MediaAsset {
+  id           String   @id @default(cuid())
+  url          String
+  filename     String
+  originalName String
+  mimeType     String
+  size         Int
+  uploadedById String?
+  uploadedBy   User?    @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+  createdAt    DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([uploadedById])
+}
+
+model Favorite {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@unique([userId, vehicleId])
+}
+
+model SavedSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name      String
+  params    Json
+  createdAt DateTime @default(now())
+}
+
+model Lead {
+  id           String     @id @default(cuid())
+  type         LeadType
+  status       LeadStatus @default(NEW)
+  name         String
+  email        String
+  phone        String?
+  message      String?    @db.Text
+  data         Json?
+  vehicleId    String?
+  vehicle      Vehicle?   @relation(fields: [vehicleId], references: [id])
+  dealerId     String?
+  dealer       Dealer?    @relation(fields: [dealerId], references: [id])
+  assignedToId String?
+  assignedTo   User?      @relation("AssignedLeads", fields: [assignedToId], references: [id])
+  notes        LeadNote[]
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status])
+  @@index([type])
+}
+
+model LeadNote {
+  id        String   @id @default(cuid())
+  leadId    String
+  lead      Lead     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  authorId  String
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model ModeratorNote {
+  id        String   @id @default(cuid())
+  vehicleId String
+  vehicle   Vehicle  @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation(fields: [authorId], references: [id])
+  content   String   @db.Text
+  createdAt DateTime @default(now())
+}
+
+model Banner {
+  id        String        @id @default(cuid())
+  title     String
+  subtitle  String?
+  imageUrl  String
+  linkUrl   String?
+  order     Int           @default(0)
+  status    ContentStatus @default(DRAFT)
+  startDate DateTime?
+  endDate   DateTime?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model Promotion {
+  id          String        @id @default(cuid())
+  title       String
+  description String?       @db.Text
+  imageUrl    String?
+  code        String?
+  discount    String?
+  status      ContentStatus @default(DRAFT)
+  startDate   DateTime?
+  endDate     DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model BlogPost {
+  id          String        @id @default(cuid())
+  title       String
+  slug        String        @unique
+  excerpt     String?
+  content     String        @db.Text
+  imageUrl    String?
+  author      String
+  status      ContentStatus @default(DRAFT)
+  publishedAt DateTime?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+}
+
+model FAQ {
+  id        String        @id @default(cuid())
+  question  String
+  answer    String        @db.Text
+  order     Int           @default(0)
+  status    ContentStatus @default(PUBLISHED)
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+model PageContent {
+  id        String   @id @default(cuid())
+  slug      String   @unique
+  title     String
+  content   String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model SiteSetting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     Json
+  updatedAt DateTime @updatedAt
+}
+
+model Notification {
+  id        String           @id @default(cuid())
+  userId    String
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      NotificationType
+  title     String
+  message   String
+  read      Boolean          @default(false)
+  link      String?
+  createdAt DateTime         @default(now())
+
+  @@index([userId, read])
+}
+
+model AuditLog {
+  id         String      @id @default(cuid())
+  userId     String?
+  user       User?       @relation(fields: [userId], references: [id], onDelete: SetNull)
+  action     AuditAction
+  entity     String
+  entityId   String?
+  details    Json?
+  ipAddress  String?
+  userAgent  String?
+  createdAt  DateTime    @default(now())
+
+  @@index([userId])
+  @@index([entity])
+  @@index([createdAt])
+}
+
+model Report {
+  id        String   @id @default(cuid())
+  type      String
+  title     String
+  data      Json
+  createdBy String?
+  createdAt DateTime @default(now())
+}

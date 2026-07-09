@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://nbautomotive.com.au/sitemap.xml

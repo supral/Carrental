@@ -1,0 +1,291 @@
+[
+  {
+    "id": "1",
+    "make": "Toyota",
+    "model": "Hilux SR5",
+    "year": 2023,
+    "price": 58990,
+    "mileage": 18500,
+    "fuelType": "Diesel",
+    "transmission": "Automatic",
+    "bodyType": "Ute",
+    "image": "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=800&q=80",
+    "images": [
+      "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=1200&q=80",
+      "https://images.unsplash.com/photo-1559419183-096fbdab4de8?w=1200&q=80",
+      "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=1200&q=80"
+    ],
+    "description": "Immaculate Toyota Hilux SR5 with full service history. Perfect for work and weekend adventures in the Top End. One owner, dealer maintained.",
+    "features": [
+      "4x4 Dual Range",
+      "Leather Trim",
+      "Reverse Camera",
+      "Apple CarPlay",
+      "Tow Bar",
+      "Bull Bar",
+      "Side Steps",
+      "LED Headlights"
+    ],
+    "featured": true,
+    "category": "cars",
+    "condition": "Used",
+    "color": "White",
+    "doors": 4,
+    "seats": 5,
+    "driveType": "AWD",
+    "location": "Darwin, NT",
+    "dealer": {
+      "name": "Everest Car Rental",
+      "phone": "08 8947 0556"
+    }
+  },
+  {
+    "id": "2",
+    "make": "Ford",
+    "model": "Ranger Wildtrak",
+    "year": 2022,
+    "price": 64990,
+    "mileage": 32000,
+    "fuelType": "Diesel",
+    "transmission": "Automatic",
+    "bodyType": "Ute",
+    "image": "https://images.unsplash.com/photo-1559419183-096fbdab4de8?w=800&q=80",
+    "images": [
+      "https://images.unsplash.com/photo-1559419183-096fbdab4de8?w=1200&q=80",
+      "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=1200&q=80"
+    ],
+    "description": "Stunning Ford Ranger Wildtrak in iconic orange. Loaded with features and ready for Darwin roads. Excellent condition throughout.",
+    "features": [
+      "Wildtrak Package",
+      "Sports Bar",
+      "Roller Shutter",
+      "SYNC 3 Infotainment",
+      "Adaptive Cruise Control",
+      "Lane Keep Assist"
+    ],
+    "featured": true,
+    "category": "cars",
+    "condition": "Used",
+    "color": "Black",
+    "doors": 4,
+    "seats": 5,
+    "driveType": "AWD",
+    "location": "Darwin, NT",
+    "dealer": {
+      "name": "Everest Car Rental",
+      "phone": "08 8947 0556"
+    }
+  },
+  {
+    "id": "3",
+    "make": "Mazda",
+    "model": "CX-5 GT",
+    "year": 2024,
+    "price": 42990,
+    "mileage": 8500,
+    "fuelType": "Petrol",
+    "transmission": "Automatic",
+    "bodyType": "SUV",
+    "image": "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=800&q=80",
+    "images": [
+      "https://images.unsplash.com/photo-1621007947382-bb3c3994e3fb?w=1200&q=80",
+      "https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?w=1200&q=80"
+    ],
+    "description": "Near-new Mazda CX-5 GT with premium Bose sound system and head-up display. Ideal family SUV for Northern Territory living.",
+    "features": [
+      "Bose Sound System",
+      "Head-Up Display",
+      "Leather Seats",
+      "Sunroof",
+      "360° Camera",
+      "Blind Spot Monitoring"
+    ],
+    "featured": true,
+    "category": "cars",
+    "condition": "Used",
+    "color": "Silver",
+    "doors": 4,
+    "seats": 5,
+    "driveType": "AWD",
+    "location": "Darwin, NT",
+    "dealer": {
+      "name": "Everest Car Rental",
+      "phone": "08 8947 0556"
+    }
+  },
+  {
+    "id": "4",
+    "make": "Hyundai",
+    "model": "i30 N Line",
+    "year": 2023,
+    "price": 34990,
+    "mileage": 12000,
+    "fuelType": "Petrol",
+    "transmission": "Automatic",
+    "bodyType": "Hatchback",
+    "image": "https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?w=800&q=80",
+    "images": [
+      "https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?w=1200&q=80"
+    ],
+    "description": "Sporty Hyundai i30 N Line with turbo performance and sharp handling. A fun daily driver with premium features.",
+    "features": [
+      "N Line Styling",
+      "Turbo Engine",
+      "Digital Cluster",
+      "Wireless Charging",
+      "Heated Seats"
+    ],
+    "featured": false,
+    "category": "cars",
+    "condition": "Used",
+    "color": "Red",
+    "doors": 4,
+    "seats": 5,
+    "driveType": "AWD",
+    "location": "Darwin, NT",
+    "dealer": {
+      "name": "Everest Car Rental",
+      "phone": "08 8947 0556"
+    }
+  },
+  {
+    "id": "5",
+    "make": "Mitsubishi",
+    "model": "Triton GLS",
+    "year": 2021,
+    "price": 38990,
+    "mileage": 45000,
+    "fuelType": "Diesel",
+    "transmission": "Manual",
+    "bodyType": "Ute",
+    "image": "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=800&q=80",
+    "images": [
+      "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=1200&q=80"
+    ],
+    "description": "Reliable Mitsubishi Triton GLS with proven diesel engine. Great value work ute with canopy included.",
+    "features": [
+      "4x4",
+      "Canopy",
+      "Bluetooth",
+      "Cruise Control",
+      "Alloy Wheels"
+    ],
+    "featured": false,
+    "category": "cars",
+    "condition": "Used",
+    "color": "White",
+    "doors": 4,
+    "seats": 5,
+    "driveType": "AWD",
+    "location": "Darwin, NT",
+    "dealer": {
+      "name": "Everest Car Rental",
+      "phone": "08 8947 0556"
+    }
+  },
+  {
+    "id": "6",
+    "make": "Toyota",
+    "model": "Camry Ascent Sport",
+    "year": 2022,
+    "price": 32990,
+    "mileage": 28000,
+    "fuelType": "Hybrid",
+    "transmission": "Automatic",
+    "bodyType": "Sedan",
+    "image": "https://images.unsplash.com/photo-1623869675781-40e3a391ebb9?w=800&q=80",
+    "images": [
+      "https://images.unsplash.com/photo-1623869675781-40e3a391ebb9?w=1200&q=80"
+    ],
+    "description": "Fuel-efficient Toyota Camry Hybrid with excellent economy for long NT drives. Smooth, comfortable, and reliable.",
+    "features": [
+      "Hybrid System",
+      "Toyota Safety Sense",
+      "Reverse Camera",
+      "Keyless Entry",
+      "Dual Zone Climate"
+    ],
+    "featured": true,
+    "category": "cars",
+    "condition": "Used",
+    "color": "Black",
+    "doors": 4,
+    "seats": 5,
+    "driveType": "AWD",
+    "location": "Darwin, NT",
+    "dealer": {
+      "name": "Everest Car Rental",
+      "phone": "08 8947 0556"
+    }
+  },
+  {
+    "id": "7",
+    "make": "Subaru",
+    "model": "Outback AWD",
+    "year": 2020,
+    "price": 36990,
+    "mileage": 52000,
+    "fuelType": "Petrol",
+    "transmission": "Automatic",
+    "bodyType": "Wagon",
+    "image": "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=800&q=80",
+    "images": [
+      "https://images.unsplash.com/photo-1609521263047-f8f205293f24?w=1200&q=80"
+    ],
+    "description": "Adventure-ready Subaru Outback with symmetrical AWD. Perfect for exploring Kakadu and beyond.",
+    "features": [
+      "Symmetrical AWD",
+      "Eyesight Safety",
+      "Roof Rails",
+      "X-Mode",
+      "Leather Seats"
+    ],
+    "featured": false,
+    "category": "cars",
+    "condition": "Used",
+    "color": "Silver",
+    "doors": 4,
+    "seats": 5,
+    "driveType": "AWD",
+    "location": "Darwin, NT",
+    "dealer": {
+      "name": "Everest Car Rental",
+      "phone": "08 8947 0556"
+    }
+  },
+  {
+    "id": "8",
+    "make": "Isuzu",
+    "model": "D-MAX LS-M",
+    "year": 2023,
+    "price": 54990,
+    "mileage": 15000,
+    "fuelType": "Diesel",
+    "transmission": "Automatic",
+    "bodyType": "Ute",
+    "image": "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=800&q=80",
+    "images": [
+      "https://images.unsplash.com/photo-1533473359331-0135ef1b58bf?w=1200&q=80"
+    ],
+    "description": "Tough Isuzu D-MAX with renowned reliability. LS-M trim with enhanced comfort and safety features.",
+    "features": [
+      "4x4",
+      "Isuzu Safety Pack",
+      "Apple CarPlay",
+      "LED Headlights",
+      "Tow Bar"
+    ],
+    "featured": false,
+    "category": "cars",
+    "condition": "Used",
+    "color": "Red",
+    "doors": 4,
+    "seats": 5,
+    "driveType": "AWD",
+    "location": "Darwin, NT",
+    "dealer": {
+      "name": "Everest Car Rental",
+      "phone": "08 8947 0556"
+    }
+  }
+]

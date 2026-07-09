@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "Vehicle" ADD COLUMN IF NOT EXISTS "offerDiscountType" TEXT DEFAULT 'AMOUNT';
+ALTER TABLE "Vehicle" ADD COLUMN IF NOT EXISTS "offerPercent" DECIMAL(5,2);
