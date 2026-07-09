@@ -2,9 +2,7 @@
 
 import Link from "next/link";
 import { useSession } from "next-auth/react";
-import { Bell, GitCompareArrows, Heart, User } from "lucide-react";
-import { useFavoritesStore } from "@/stores/favorites";
-import { useCompareStore } from "@/stores/compare";
+import { Bell, User } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface ActionButtonsProps {
@@ -41,8 +39,6 @@ function IconButton({
 
 export default function ActionButtons({ className, compact = false }: ActionButtonsProps) {
   const { data: session } = useSession();
-  const favoriteCount = useFavoritesStore((s) => s.ids.length);
-  const compareCount = useCompareStore((s) => s.ids.length);
 
   const profileHref = session?.user ? "/admin" : "/admin/login";
   const profileLabel = session?.user ? "Profile" : "Login";
@@ -50,17 +46,9 @@ export default function ActionButtons({ className, compact = false }: ActionButt
   return (
     <div className={cn("flex items-center gap-1.5 xl:gap-2", className)}>
       {!compact && (
-        <>
-          <IconButton href="/favorites" label="Wishlist" count={favoriteCount}>
-            <Heart className="h-5 w-5" />
-          </IconButton>
-          <IconButton href="/compare" label="Compare vehicles" count={compareCount}>
-            <GitCompareArrows className="h-5 w-5" />
-          </IconButton>
-          <IconButton href="/my-bookings" label="Notifications">
-            <Bell className="h-5 w-5" />
-          </IconButton>
-        </>
+        <IconButton href="/my-bookings" label="My bookings">
+          <Bell className="h-5 w-5" />
+        </IconButton>
       )}
 
       <Link
