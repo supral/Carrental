@@ -1,23 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import { ListingPurpose, Prisma, RentalBookingStatus, RentalPaymentStatus, VehicleStatus } from "@prisma/client";
-import { mapDbVehicleToPublic } from "@/lib/vehicles/public-vehicle-service";
 import { isWithinRentalAvailabilityWindow } from "@/lib/rentals/availability-window";
 import {
   assertFleetUnitsAvailable,
-  getFleetAvailability,
+  blockingRentalBookingFilter,
   NO_VEHICLES_AVAILABLE_MESSAGE,
+  rentalDateOverlapFilter,
 } from "@/lib/rentals/fleet-inventory";
 import { RentalUnavailableError } from "@/lib/rentals/rental-errors";
-import { calculateRentalDays } from "@/lib/rentals/pricing";
+import { handleRentalBookingStatusChange } from "@/lib/rentals/rental-inventory-units";
+import { rentalOverlapFilter } from "@/lib/rentals/rental-overlap";
 import { quoteRentalBooking } from "@/lib/rentals/rental-options-service";
+import {
+  buildRentalSearchVehicleWhere,
+  mapRentalSearchVehicle,
+  rentalSearchInclude,
+} from "@/lib/rentals/search-mapper";
+import { RENTAL_TRANSACTION_OPTIONS } from "@/lib/rentals/transaction-options";
 import type { RentalSearchRequest, RentalVehicleResult } from "@/types/rental";
-
-const vehicleInclude = {
-  dealer: { select: { name: true, phone: true, rating: true } },
-  images: { orderBy: { order: "asc" as const } },
-  vehicleType: { select: { id: true, name: true } },
-  seasonOffer: true,
-};
 
 export interface RentalAvailabilitySearchInput extends RentalSearchRequest {
   page?: number;
@@ -47,48 +47,54 @@ export async function searchAvailableRentalVehicles(input: RentalAvailabilitySea
   const { pickupAt, dropoffAt } = parseSearchWindow(input);
   const page = Math.max(1, input.page || 1);
   const limit = Math.min(100, Math.max(1, input.limit || 12));
+  const vehicleWhere = buildRentalSearchVehicleWhere(pickupAt, dropoffAt);
 
-  const where = {
-    status: VehicleStatus.ACTIVE,
-    listingPurpose: ListingPurpose.RENTAL,
-    AND: [
-      {
-        OR: [{ rentalAvailableFrom: null }, { rentalAvailableFrom: { lte: pickupAt } }],
+  const [rows, reservationCounts] = await Promise.all([
+    prisma.vehicle.findMany({
+      where: vehicleWhere,
+      include: rentalSearchInclude,
+      orderBy: { price: "asc" },
+    }),
+    prisma.rentalBooking.groupBy({
+      by: ["vehicleId"],
+      where: {
+        vehicle: vehicleWhere,
+        ...rentalDateOverlapFilter(pickupAt, dropoffAt),
+        ...blockingRentalBookingFilter(),
       },
-      {
-        OR: [{ rentalAvailableTo: null }, { rentalAvailableTo: { gte: dropoffAt } }],
-      },
-    ],
-  };
+      _count: { _all: true },
+    }),
+  ]);
 
-  const rows = await prisma.vehicle.findMany({
-    where,
-    include: vehicleInclude,
-    orderBy: { createdAt: "desc" },
-  });
-
-  const withFleet = await Promise.all(
-    rows.map(async (vehicle) => {
-      const fleet = await getFleetAvailability(vehicle.id, { pickupAt, dropoffAt });
-      return { vehicle, fleet };
-    })
+  const reservedByVehicleId = new Map(
+    reservationCounts.map((row) => [row.vehicleId, row._count._all])
   );
 
-  const availableRows = withFleet.filter(({ fleet }) => fleet.availableUnits > 0);
+  const availableRows = rows
+    .map((vehicle) => {
+      const totalUnits = Math.max(1, vehicle.totalUnits ?? 1);
+      const storedAvailable = Math.max(0, vehicle.availableUnits ?? totalUnits);
+      const reservedForRange = reservedByVehicleId.get(vehicle.id) ?? 0;
+      const rangeAvailable = Math.max(0, totalUnits - reservedForRange);
+      const availableUnits = Math.min(storedAvailable, rangeAvailable);
+
+      return {
+        vehicle,
+        fleet: {
+          totalUnits,
+          reservedUnits: totalUnits - availableUnits,
+          availableUnits,
+        },
+      };
+    })
+    .filter(({ fleet }) => fleet.availableUnits > 0);
   const total = availableRows.length;
   const start = (page - 1) * limit;
   const pageRows = availableRows.slice(start, start + limit);
 
-  const data: RentalVehicleResult[] = pageRows.map(({ vehicle, fleet }) => {
-    const mapped = mapDbVehicleToPublic(vehicle);
-    return {
-      ...mapped,
-      totalUnits: fleet.totalUnits,
-      reservedUnits: fleet.reservedUnits,
-      availableUnits: fleet.availableUnits,
-      rating: vehicle.dealer.rating > 0 ? vehicle.dealer.rating : 4.5,
-    };
-  });
+  const data: RentalVehicleResult[] = pageRows.map(({ vehicle, fleet }) =>
+    mapRentalSearchVehicle(vehicle, fleet)
+  );
 
   return {
     data,
@@ -127,36 +133,42 @@ export interface CreateRentalBookingInput {
 export async function createRentalBooking(input: CreateRentalBookingInput) {
   const range = { pickupAt: input.pickupAt, dropoffAt: input.dropoffAt };
 
+  const vehicle = await prisma.vehicle.findFirst({
+    where: {
+      id: input.vehicleId,
+      status: VehicleStatus.ACTIVE,
+      listingPurpose: ListingPurpose.RENTAL,
+    },
+    select: {
+      id: true,
+      rentalAvailableFrom: true,
+      rentalAvailableTo: true,
+    },
+  });
+
+  if (!vehicle) {
+    throw new Error("This rental vehicle is not available");
+  }
+
+  if (
+    !isWithinRentalAvailabilityWindow(
+      input.pickupAt,
+      input.dropoffAt,
+      vehicle.rentalAvailableFrom,
+      vehicle.rentalAvailableTo
+    )
+  ) {
+    throw new Error("This vehicle is not available for the selected dates");
+  }
+
+  const quote = await quoteRentalBooking({
+    vehicleId: input.vehicleId,
+    pickupAt: input.pickupAt,
+    dropoffAt: input.dropoffAt,
+    selectedOptions: input.selectedOptions ?? [],
+  });
+
   return prisma.$transaction(async (tx) => {
-    const vehicle = await tx.vehicle.findFirst({
-      where: {
-        id: input.vehicleId,
-        status: VehicleStatus.ACTIVE,
-        listingPurpose: ListingPurpose.RENTAL,
-      },
-      select: {
-        id: true,
-        price: true,
-        rentalAvailableFrom: true,
-        rentalAvailableTo: true,
-      },
-    });
-
-    if (!vehicle) {
-      throw new Error("This rental vehicle is not available");
-    }
-
-    if (
-      !isWithinRentalAvailabilityWindow(
-        input.pickupAt,
-        input.dropoffAt,
-        vehicle.rentalAvailableFrom,
-        vehicle.rentalAvailableTo
-      )
-    ) {
-      throw new Error("This vehicle is not available for the selected dates");
-    }
-
     await tx.$executeRaw`
       SELECT id FROM "Vehicle"
       WHERE id = ${input.vehicleId}
@@ -164,13 +176,6 @@ export async function createRentalBooking(input: CreateRentalBookingInput) {
     `;
 
     await assertFleetUnitsAvailable(input.vehicleId, range, { client: tx });
-
-    const quote = await quoteRentalBooking({
-      vehicleId: input.vehicleId,
-      pickupAt: input.pickupAt,
-      dropoffAt: input.dropoffAt,
-      selectedOptions: input.selectedOptions ?? [],
-    });
 
     return tx.rentalBooking.create({
       data: {
@@ -200,7 +205,139 @@ export async function createRentalBooking(input: CreateRentalBookingInput) {
         paymentStatus: RentalPaymentStatus.UNPAID,
       },
     });
+  }, RENTAL_TRANSACTION_OPTIONS);
+}
+
+const confirmedBookingInclude = {
+  vehicle: {
+    select: {
+      title: true,
+      make: true,
+      model: true,
+      year: true,
+      vehicleNumber: true,
+    },
+  },
+} as const;
+
+/** Create and confirm a rental booking in one transaction (Stripe bypass / immediate confirm). */
+export async function createAndConfirmRentalBooking(input: CreateRentalBookingInput) {
+  const range = { pickupAt: input.pickupAt, dropoffAt: input.dropoffAt };
+
+  const vehicle = await prisma.vehicle.findFirst({
+    where: {
+      id: input.vehicleId,
+      status: VehicleStatus.ACTIVE,
+      listingPurpose: ListingPurpose.RENTAL,
+    },
+    select: {
+      id: true,
+      rentalAvailableFrom: true,
+      rentalAvailableTo: true,
+    },
   });
+
+  if (!vehicle) {
+    throw new Error("This rental vehicle is not available");
+  }
+
+  if (
+    !isWithinRentalAvailabilityWindow(
+      input.pickupAt,
+      input.dropoffAt,
+      vehicle.rentalAvailableFrom,
+      vehicle.rentalAvailableTo
+    )
+  ) {
+    throw new Error("This vehicle is not available for the selected dates");
+  }
+
+  const quote = await quoteRentalBooking({
+    vehicleId: input.vehicleId,
+    pickupAt: input.pickupAt,
+    dropoffAt: input.dropoffAt,
+    selectedOptions: input.selectedOptions ?? [],
+  });
+
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`
+      SELECT id FROM "Vehicle"
+      WHERE id = ${input.vehicleId}
+      FOR UPDATE
+    `;
+
+    await assertFleetUnitsAvailable(input.vehicleId, range, { client: tx });
+
+    const created = await tx.rentalBooking.create({
+      data: {
+        vehicleId: input.vehicleId,
+        pickupAddress: input.pickupAddress,
+        dropoffAddress: input.dropoffAddress,
+        pickupAt: input.pickupAt,
+        dropoffAt: input.dropoffAt,
+        customerName: input.customerName,
+        customerEmail: input.customerEmail,
+        customerPhone: input.customerPhone,
+        customerAddress: input.customerAddress,
+        customerZip: input.customerZip,
+        customerDob: input.customerDob,
+        customerCountry: input.customerCountry,
+        drivingLicenceNumber: input.drivingLicenceNumber || null,
+        licencePhotoUrl: input.licencePhotoUrl || null,
+        notes: input.notes,
+        rentalDays: quote.breakdown.rentalDays,
+        baseAmountCents: quote.breakdown.baseAmountCents,
+        extrasAmountCents: quote.breakdown.extrasAmountCents,
+        taxAmountCents: quote.breakdown.taxAmountCents,
+        totalAmountCents: quote.breakdown.totalAmountCents,
+        selectedOptions: quote.breakdown.optionLines as unknown as Prisma.InputJsonValue,
+        currency: "aud",
+        status: RentalBookingStatus.PENDING,
+        paymentStatus: RentalPaymentStatus.UNPAID,
+      },
+    });
+
+    const confirmed = await tx.rentalBooking.update({
+      where: { id: created.id },
+      data: {
+        paymentStatus: RentalPaymentStatus.PAID,
+        status: RentalBookingStatus.CONFIRMED,
+        paidAt: new Date(),
+      },
+      include: confirmedBookingInclude,
+    });
+
+    await handleRentalBookingStatusChange(
+      created.id,
+      RentalBookingStatus.PENDING,
+      RentalBookingStatus.CONFIRMED,
+      tx
+    );
+
+    const losers = await tx.rentalBooking.findMany({
+      where: {
+        ...rentalOverlapFilter(input.vehicleId, range, created.id),
+        paymentStatus: { not: RentalPaymentStatus.PAID },
+      },
+      select: { id: true, status: true },
+    });
+
+    for (const loser of losers) {
+      const loserPrevious = loser.status;
+      await tx.rentalBooking.update({
+        where: { id: loser.id },
+        data: { status: RentalBookingStatus.CANCELLED },
+      });
+      await handleRentalBookingStatusChange(
+        loser.id,
+        loserPrevious,
+        RentalBookingStatus.CANCELLED,
+        tx
+      );
+    }
+
+    return confirmed;
+  }, RENTAL_TRANSACTION_OPTIONS);
 }
 
 export { NO_VEHICLES_AVAILABLE_MESSAGE, RentalUnavailableError };

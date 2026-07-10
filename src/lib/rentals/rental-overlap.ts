@@ -5,6 +5,7 @@ import { siteConfig } from "@/data/services";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { format } from "date-fns";
 import { RentalUnavailableError } from "@/lib/rentals/rental-errors";
+import { RENTAL_TRANSACTION_OPTIONS } from "@/lib/rentals/transaction-options";
 import {
   assertFleetUnitsAvailable,
   blockingRentalBookingFilter,
@@ -220,7 +221,7 @@ export async function claimRentalBookingPayment(bookingId: string) {
     }
 
     return { confirmed, cancelledLosers: losers };
-  });
+  }, RENTAL_TRANSACTION_OPTIONS);
 }
 
 export async function sendRentalLoserNotifications(

@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
-import { createRentalBooking } from "@/lib/rentals/availability-service";
+import { createAndConfirmRentalBooking, createRentalBooking } from "@/lib/rentals/availability-service";
 import {
-  confirmRentalBookingWithoutPayment,
   createRentalCheckoutSession,
 } from "@/lib/rentals/stripe-checkout";
 import { RentalUnavailableError } from "@/lib/rentals/rental-errors";
+import { sendRentalBookingConfirmationEmail } from "@/lib/rentals/rental-booking-email";
 import { getAppBaseUrl, shouldBypassStripePayment } from "@/lib/stripe";
 import { parseSelectedRentalOptions } from "@/lib/rentals/option-catalog";
 
@@ -58,20 +58,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: "Invalid date of birth" }, { status: 400 });
     }
 
-    const booking = await createRentalBooking({
-      ...bookingInput,
-      drivingLicenceNumber: bookingInput.drivingLicenceNumber?.trim() || undefined,
-      licencePhotoUrl: bookingInput.licencePhotoUrl?.trim() || undefined,
-      selectedOptions: parseSelectedRentalOptions(bookingInput.selectedOptions),
-      pickupAt,
-      dropoffAt,
-      customerDob,
-    });
-
     if (shouldBypassStripePayment()) {
       try {
-        const confirmed = await confirmRentalBookingWithoutPayment(booking.id);
+        const confirmed = await createAndConfirmRentalBooking({
+          ...bookingInput,
+          drivingLicenceNumber: bookingInput.drivingLicenceNumber?.trim() || undefined,
+          licencePhotoUrl: bookingInput.licencePhotoUrl?.trim() || undefined,
+          selectedOptions: parseSelectedRentalOptions(bookingInput.selectedOptions),
+          pickupAt,
+          dropoffAt,
+          customerDob,
+        });
         const baseUrl = getAppBaseUrl();
+
+        await sendRentalBookingConfirmationEmail(confirmed).catch((error) => {
+          console.error("[rental-booking-email]", error);
+        });
 
         console.log(
           `[rental-booking] Stripe bypassed — booking ${confirmed.id} confirmed, confirmation email sent to ${confirmed.customerEmail ?? "n/a"}`
@@ -101,6 +103,16 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const booking = await createRentalBooking({
+      ...bookingInput,
+      drivingLicenceNumber: bookingInput.drivingLicenceNumber?.trim() || undefined,
+      licencePhotoUrl: bookingInput.licencePhotoUrl?.trim() || undefined,
+      selectedOptions: parseSelectedRentalOptions(bookingInput.selectedOptions),
+      pickupAt,
+      dropoffAt,
+      customerDob,
+    });
+
     const checkout = await createRentalCheckoutSession(booking.id);
 
     return NextResponse.json({
@@ -127,6 +139,9 @@ export async function POST(request: NextRequest) {
       );
     }
     const message = error instanceof Error ? error.message : "Booking failed";
-    return NextResponse.json({ success: false, error: message }, { status: 400 });
+    const friendlyMessage = message.includes("Transaction API error")
+      ? "Booking could not be completed due to a temporary database issue. Please try again."
+      : message;
+    return NextResponse.json({ success: false, error: friendlyMessage }, { status: 400 });
   }
 }

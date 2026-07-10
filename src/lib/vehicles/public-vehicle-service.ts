@@ -254,6 +254,7 @@ export async function getPublicRentalVehicleById(id: string) {
       id,
       status: VehicleStatus.ACTIVE,
       listingPurpose: ListingPurpose.RENTAL,
+      availableUnits: { gt: 0 },
     },
     include: vehicleInclude,
   });
@@ -407,6 +408,8 @@ const rentalFleetSelect = {
   location: true,
   totalUnits: true,
   availableUnits: true,
+  rentalAvailableFrom: true,
+  rentalAvailableTo: true,
   vehicleType: { select: { name: true } },
   images: { orderBy: { order: "asc" as const }, take: 1, select: { url: true } },
 } satisfies Prisma.VehicleSelect;
@@ -441,6 +444,8 @@ function mapRentalFleetRow(vehicle: RentalFleetRow): Vehicle {
     features: [],
     totalUnits: vehicle.totalUnits ?? 1,
     availableUnits: vehicle.availableUnits ?? vehicle.totalUnits ?? 1,
+    rentalAvailableFrom: vehicle.rentalAvailableFrom?.toISOString(),
+    rentalAvailableTo: vehicle.rentalAvailableTo?.toISOString(),
     vehicleTypeName: vehicle.vehicleType?.name,
   };
 }

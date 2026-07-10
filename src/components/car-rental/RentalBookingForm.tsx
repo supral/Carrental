@@ -2,10 +2,11 @@
 
 import { useRef, useState, FormEvent, ChangeEvent, useEffect, useMemo } from "react";
 import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
-import { submitForm, uploadLicencePhoto } from "@/lib/api";
+import { uploadLicencePhoto } from "@/lib/api";
 import { createRentalBookingRequest } from "@/lib/rentals/rental-api";
 import { combineDateAndTime, normalizeTimeValue } from "@/lib/rentals/search-validation";
 import { calculateRentalDays } from "@/lib/rentals/pricing";
+import { dealershipLocation } from "@/lib/rentals/locations";
 import { Vehicle } from "@/types";
 import type { RentalBookingContext } from "@/types/rental";
 import { formatPrice } from "@/lib/utils";
@@ -19,13 +20,24 @@ interface RentalBookingFormProps {
 
 function tripDetailsFromContext(context?: RentalBookingContext) {
   return {
-    pickupAddress: context?.pickupAddress ?? "",
-    dropoffAddress: context?.dropoffAddress ?? "",
+    pickupAddress: context?.pickupAddress ?? dealershipLocation.address,
+    dropoffAddress: context?.dropoffAddress ?? dealershipLocation.address,
     pickupDate: context?.pickupDate ?? "",
-    pickupTime: context?.pickupTime ? normalizeTimeValue(context.pickupTime) : "",
+    pickupTime: context?.pickupTime ? normalizeTimeValue(context.pickupTime) : "09:00",
     dropoffDate: context?.dropoffDate ?? "",
-    dropoffTime: context?.dropoffTime ? normalizeTimeValue(context.dropoffTime) : "",
+    dropoffTime: context?.dropoffTime ? normalizeTimeValue(context.dropoffTime) : "09:00",
   };
+}
+
+function hasCompleteTrip(tripDetails: ReturnType<typeof tripDetailsFromContext>) {
+  return Boolean(
+    tripDetails.pickupAddress.trim() &&
+      tripDetails.dropoffAddress.trim() &&
+      tripDetails.pickupDate &&
+      tripDetails.pickupTime &&
+      tripDetails.dropoffDate &&
+      tripDetails.dropoffTime
+  );
 }
 
 export default function RentalBookingForm({ vehicle, bookingContext, className = "" }: RentalBookingFormProps) {
@@ -33,10 +45,11 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [licenceFile, setLicenceFile] = useState<File | null>(null);
   const [licencePreview, setLicencePreview] = useState<string | null>(null);
-  const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tripDetails, setTripDetails] = useState(() => tripDetailsFromContext(bookingContext));
+  const tripReady = hasCompleteTrip(tripDetails);
+  const fromSearch = Boolean(bookingContext);
 
   useEffect(() => {
     if (bookingContext) {
@@ -51,22 +64,14 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
     bookingContext?.dropoffTime,
   ]);
 
-  const hasSearchTrip = Boolean(
-    bookingContext &&
-      tripDetails.pickupDate &&
-      tripDetails.pickupTime &&
-      tripDetails.dropoffDate &&
-      tripDetails.dropoffTime
-  );
-
   const rentalQuote = useMemo(() => {
-    if (!hasSearchTrip) return null;
+    if (!tripReady) return null;
     const pickupAt = combineDateAndTime(tripDetails.pickupDate, tripDetails.pickupTime);
     const dropoffAt = combineDateAndTime(tripDetails.dropoffDate, tripDetails.dropoffTime);
     if (Number.isNaN(pickupAt.getTime()) || Number.isNaN(dropoffAt.getTime())) return null;
     const days = calculateRentalDays(pickupAt, dropoffAt);
     return { days, total: vehicle.price * days };
-  }, [hasSearchTrip, tripDetails, vehicle.price]);
+  }, [tripReady, tripDetails, vehicle.price]);
 
   const updateTripField = (field: keyof typeof tripDetails, value: string) => {
     setTripDetails((prev) => ({ ...prev, [field]: value }));
@@ -102,82 +107,52 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
     });
 
     try {
+      if (!tripReady) {
+        throw new Error("Please complete pickup and drop-off details.");
+      }
+
+      const pickupAt = combineDateAndTime(tripDetails.pickupDate, tripDetails.pickupTime);
+      const dropoffAt = combineDateAndTime(tripDetails.dropoffDate, tripDetails.dropoffTime);
+
+      if (dropoffAt <= pickupAt) {
+        throw new Error("Drop-off must be after pickup.");
+      }
+
       const licencePhotoUrl = licenceFile ? await uploadLicencePhoto(licenceFile) : undefined;
       const drivingLicenceNumber = data.drivingLicenceNumber?.trim()
         ? data.drivingLicenceNumber.trim().toUpperCase()
         : undefined;
 
-      if (hasSearchTrip) {
-        const pickupAt = combineDateAndTime(tripDetails.pickupDate, tripDetails.pickupTime);
-        const dropoffAt = combineDateAndTime(tripDetails.dropoffDate, tripDetails.dropoffTime);
+      const response = await createRentalBookingRequest({
+        vehicleId: vehicle.id,
+        pickupAddress: tripDetails.pickupAddress.trim(),
+        dropoffAddress: tripDetails.dropoffAddress.trim(),
+        pickupDateTime: pickupAt.toISOString(),
+        dropoffDateTime: dropoffAt.toISOString(),
+        customerName: data.name,
+        customerEmail: data.email,
+        customerPhone: data.phone,
+        customerAddress: data.address,
+        customerZip: data.zip,
+        customerDob: data.dob,
+        customerCountry: data.country,
+        drivingLicenceNumber,
+        licencePhotoUrl,
+        notes: data.message,
+      });
 
-        await createRentalBookingRequest({
-          vehicleId: vehicle.id,
-          pickupAddress: tripDetails.pickupAddress.trim(),
-          dropoffAddress: tripDetails.dropoffAddress.trim(),
-          pickupDateTime: pickupAt.toISOString(),
-          dropoffDateTime: dropoffAt.toISOString(),
-          customerName: data.name,
-          customerEmail: data.email,
-          customerPhone: data.phone,
-          customerAddress: data.address,
-          customerZip: data.zip,
-          customerDob: data.dob,
-          customerCountry: data.country,
-          drivingLicenceNumber,
-          licencePhotoUrl,
-          notes: data.message,
-        }).then((response) => {
-          const redirectUrl = response.data.checkoutUrl ?? response.data.successUrl;
-          if (!redirectUrl) {
-            throw new Error("Booking could not be completed");
-          }
-          window.location.href = redirectUrl;
-        });
-        return;
-      } else {
-        data.vehicle = vehicleTitle;
-        data.vehicleInfo = vehicleTitle;
-        if (licencePhotoUrl) data.licencePhotoUrl = licencePhotoUrl;
-        if (drivingLicenceNumber) data.drivingLicenceNumber = drivingLicenceNumber;
-        data.pickupDate = data.pickupDate;
-        data.returnDate = data.returnDate;
-        await submitForm("car-rental", data);
+      const redirectUrl = response.data.checkoutUrl ?? response.data.successUrl;
+      if (!redirectUrl) {
+        throw new Error("Booking could not be completed");
       }
 
-      setSubmitted(true);
-      setLicenceFile(null);
-      setLicencePreview(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      window.location.href = redirectUrl;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit. Please try again.");
     } finally {
       setLoading(false);
     }
   };
-
-  if (submitted) {
-    return (
-      <div className={`rounded-xl border border-green-200 bg-green-50 p-8 text-center ${className}`}>
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100">
-          <svg className="h-7 w-7 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
-        <h3 className="mb-2 text-xl font-bold text-gray-900">Booking Request Received</h3>
-        <p className="text-gray-600">
-          Thank you for your rental enquiry for <strong>{vehicleTitle}</strong>. We&apos;ll confirm availability and pricing shortly.
-        </p>
-        <button
-          type="button"
-          onClick={() => setSubmitted(false)}
-          className="mt-4 text-sm font-medium text-primary hover:text-primary/80"
-        >
-          Submit another request
-        </button>
-      </div>
-    );
-  }
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -186,7 +161,7 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
       <div className="mb-6">
         <h3 className="text-2xl font-bold text-gray-900">Book This Rental</h3>
         <p className="mt-2 text-gray-600">
-          Fill in your details and we&apos;ll confirm availability for {vehicleTitle}.
+          Choose your dates and complete your booking for {vehicleTitle}. A confirmation email will be sent once submitted.
         </p>
       </div>
 
@@ -208,65 +183,62 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
       <form onSubmit={handleSubmit} className="space-y-4">
         <input type="hidden" name="vehicle" value={vehicleTitle} />
 
-        {hasSearchTrip && (
-          <section className="rounded-lg border border-gray-200 bg-gray-50 p-4 sm:p-5">
-            <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-900">
-              Your trip (from search)
-            </h4>
-            <div className="space-y-4">
-              <div>
-                <label htmlFor="pickupAddress" className="mb-1 block text-sm font-medium text-gray-700">
-                  Pickup Address <span className="text-primary">*</span>
-                </label>
-                <input
-                  id="pickupAddress"
-                  name="pickupAddress"
-                  type="text"
-                  required
-                  value={tripDetails.pickupAddress}
-                  onChange={(e) => updateTripField("pickupAddress", e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-              <div>
-                <label htmlFor="dropoffAddress" className="mb-1 block text-sm font-medium text-gray-700">
-                  Drop-off Address <span className="text-primary">*</span>
-                </label>
-                <input
-                  id="dropoffAddress"
-                  name="dropoffAddress"
-                  type="text"
-                  required
-                  value={tripDetails.dropoffAddress}
-                  onChange={(e) => updateTripField("dropoffAddress", e.target.value)}
-                  className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-              <RentalDateTimePicker
-                label="Pickup date & time *"
-                dateValue={tripDetails.pickupDate}
-                timeValue={tripDetails.pickupTime}
-                minDate={today}
-                onDateChange={(value) => updateTripField("pickupDate", value)}
-                onTimeChange={(value) => updateTripField("pickupTime", value)}
-              />
-              <RentalDateTimePicker
-                label="Drop-off date & time *"
-                dateValue={tripDetails.dropoffDate}
-                timeValue={tripDetails.dropoffTime}
-                minDate={tripDetails.pickupDate || today}
-                minTime={
-                  tripDetails.dropoffDate &&
-                  tripDetails.dropoffDate === tripDetails.pickupDate
-                    ? tripDetails.pickupTime
-                    : undefined
-                }
-                onDateChange={(value) => updateTripField("dropoffDate", value)}
-                onTimeChange={(value) => updateTripField("dropoffTime", value)}
+        <section className="rounded-lg border border-gray-200 bg-gray-50 p-4 sm:p-5">
+          <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-900">
+            {fromSearch ? "Your trip (from search)" : "Rental dates & locations"}
+          </h4>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="pickupAddress" className="mb-1 block text-sm font-medium text-gray-700">
+                Pickup Address <span className="text-primary">*</span>
+              </label>
+              <input
+                id="pickupAddress"
+                name="pickupAddress"
+                type="text"
+                required
+                value={tripDetails.pickupAddress}
+                onChange={(e) => updateTripField("pickupAddress", e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
-          </section>
-        )}
+            <div>
+              <label htmlFor="dropoffAddress" className="mb-1 block text-sm font-medium text-gray-700">
+                Drop-off Address <span className="text-primary">*</span>
+              </label>
+              <input
+                id="dropoffAddress"
+                name="dropoffAddress"
+                type="text"
+                required
+                value={tripDetails.dropoffAddress}
+                onChange={(e) => updateTripField("dropoffAddress", e.target.value)}
+                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <RentalDateTimePicker
+              label="Pickup date & time *"
+              dateValue={tripDetails.pickupDate}
+              timeValue={tripDetails.pickupTime}
+              minDate={today}
+              onDateChange={(value) => updateTripField("pickupDate", value)}
+              onTimeChange={(value) => updateTripField("pickupTime", value)}
+            />
+            <RentalDateTimePicker
+              label="Drop-off date & time *"
+              dateValue={tripDetails.dropoffDate}
+              timeValue={tripDetails.dropoffTime}
+              minDate={tripDetails.pickupDate || today}
+              minTime={
+                tripDetails.dropoffDate && tripDetails.dropoffDate === tripDetails.pickupDate
+                  ? tripDetails.pickupTime
+                  : undefined
+              }
+              onDateChange={(value) => updateTripField("dropoffDate", value)}
+              onTimeChange={(value) => updateTripField("dropoffTime", value)}
+            />
+          </div>
+        </section>
 
         <div>
           <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">
@@ -418,36 +390,6 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
           </div>
         </section>
 
-        {!hasSearchTrip && (
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="pickupDate" className="mb-1 block text-sm font-medium text-gray-700">
-                Pickup Date <span className="text-primary">*</span>
-              </label>
-              <input
-                id="pickupDate"
-                name="pickupDate"
-                type="date"
-                required
-                min={today}
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-            <div>
-              <label htmlFor="returnDate" className="mb-1 block text-sm font-medium text-gray-700">
-                Return Date <span className="text-primary">*</span>
-              </label>
-              <input
-                id="returnDate"
-                name="returnDate"
-                type="date"
-                required
-                min={today}
-                className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-          </div>
-        )}
 
         <div>
           <label htmlFor="message" className="mb-1 block text-sm font-medium text-gray-700">
@@ -470,16 +412,14 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
 
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !tripReady}
           className="w-full rounded-lg bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Processing..." : hasSearchTrip ? "Confirm Booking" : "Submit Rental Request"}
+          {loading ? "Processing..." : "Confirm Booking"}
         </button>
 
         <p className="text-center text-xs text-gray-500">
-          {hasSearchTrip
-            ? "Your booking will be confirmed immediately and a confirmation email will be sent to you."
-            : "By submitting, you agree to be contacted about your rental enquiry."}
+          Your booking will be confirmed immediately and a confirmation email will be sent to you.
         </p>
       </form>
     </div>

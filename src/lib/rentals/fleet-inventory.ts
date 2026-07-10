@@ -78,6 +78,59 @@ export async function countActiveReservations(
   });
 }
 
+function computeFleetAvailability(
+  vehicle: { totalUnits: number | null; availableUnits: number | null },
+  reservedForRange: number
+): FleetAvailability {
+  const totalUnits = Math.max(1, vehicle.totalUnits ?? 1);
+  const storedAvailable = Math.max(0, vehicle.availableUnits ?? totalUnits);
+  const rangeAvailable = Math.max(0, totalUnits - reservedForRange);
+  const availableUnits = Math.min(storedAvailable, rangeAvailable);
+  const reservedUnits = totalUnits - availableUnits;
+
+  return { totalUnits, reservedUnits, availableUnits };
+}
+
+/** Batch fleet availability for search — 2 queries instead of 2 per vehicle. */
+export async function getFleetAvailabilityBatch(
+  vehicleIds: string[],
+  range: DateRange,
+  now = new Date()
+): Promise<Map<string, FleetAvailability>> {
+  const result = new Map<string, FleetAvailability>();
+  if (vehicleIds.length === 0) {
+    return result;
+  }
+
+  const vehicles = await prisma.vehicle.findMany({
+    where: { id: { in: vehicleIds } },
+    select: { id: true, totalUnits: true, availableUnits: true },
+  });
+
+  const reservationCounts = await prisma.rentalBooking.groupBy({
+    by: ["vehicleId"],
+    where: {
+      vehicleId: { in: vehicleIds },
+      ...rentalDateOverlapFilter(range.pickupAt, range.dropoffAt),
+      ...blockingRentalBookingFilter(now),
+    },
+    _count: { _all: true },
+  });
+
+  const reservedByVehicleId = new Map(
+    reservationCounts.map((row) => [row.vehicleId, row._count._all])
+  );
+
+  for (const vehicle of vehicles) {
+    result.set(
+      vehicle.id,
+      computeFleetAvailability(vehicle, reservedByVehicleId.get(vehicle.id) ?? 0)
+    );
+  }
+
+  return result;
+}
+
 export async function getFleetAvailability(
   vehicleId: string,
   range: DateRange,
@@ -94,14 +147,12 @@ export async function getFleetAvailability(
     select: { totalUnits: true, availableUnits: true },
   });
 
-  const totalUnits = Math.max(1, vehicle?.totalUnits ?? 1);
-  const storedAvailable = Math.max(0, vehicle?.availableUnits ?? totalUnits);
   const reservedForRange = await countActiveReservations(vehicleId, range, options);
-  const rangeAvailable = Math.max(0, totalUnits - reservedForRange);
-  const availableUnits = Math.min(storedAvailable, rangeAvailable);
-  const reservedUnits = totalUnits - availableUnits;
 
-  return { totalUnits, reservedUnits, availableUnits };
+  return computeFleetAvailability(
+    vehicle ?? { totalUnits: 1, availableUnits: 1 },
+    reservedForRange
+  );
 }
 
 export async function assertFleetUnitsAvailable(

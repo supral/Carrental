@@ -15,7 +15,8 @@ import {
   filterAndSortRentalResults,
   paginateResults,
 } from "@/lib/rentals/filter-utils";
-import { searchAvailableRentals } from "@/lib/rentals/rental-api";
+import { filterFleetForInstantSearch } from "@/lib/rentals/instant-search";
+import { searchRentalVehiclesAction } from "@/lib/rentals/search-actions";
 import { toRentalSearchRequest, validateRentalSearchForm } from "@/lib/rentals/search-validation";
 import { videoPanel } from "@/lib/video-page-styles";
 import { cn } from "@/lib/utils";
@@ -24,6 +25,7 @@ import type {
   RentalResultFilters,
   RentalSearchFormValues,
   RentalSearchRequest,
+  RentalVehicleResult,
 } from "@/types/rental";
 import type { Vehicle } from "@/types";
 
@@ -48,12 +50,17 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
   const [formErrors, setFormErrors] = useState<Partial<Record<keyof RentalSearchFormValues, string>>>({});
   const [searchRequest, setSearchRequest] = useState<RentalSearchRequest | null>(null);
   const [searchContext, setSearchContext] = useState<RentalBookingContext | null>(null);
+  const [instantResults, setInstantResults] = useState<RentalVehicleResult[] | null>(null);
   const [filters, setFilters] = useState<RentalResultFilters>({ sort: "price-asc", page: 1, limit: RESULTS_PER_PAGE });
   const resultsRef = useRef<HTMLElement>(null);
 
   const { data, isFetching, error, isSuccess } = useQuery({
     queryKey: ["rental-search", searchRequest],
-    queryFn: () => searchAvailableRentals(searchRequest!, { limit: 100 }),
+    queryFn: () =>
+      searchRentalVehiclesAction({
+        ...searchRequest!,
+        limit: 100,
+      }),
     enabled: !!searchRequest,
     staleTime: 5 * 60 * 1000,
   });
@@ -76,7 +83,15 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
     }
 
     setFormErrors({});
-    setSearchRequest(toRentalSearchRequest(result.data));
+    const request = toRentalSearchRequest(result.data);
+    setInstantResults(
+      filterFleetForInstantSearch(
+        fleetVehicles,
+        request.pickupDateTime,
+        request.dropoffDateTime
+      )
+    );
+    setSearchRequest(request);
     setSearchContext(result.data);
     setFilters({ sort: "price-asc", page: 1, limit: RESULTS_PER_PAGE });
   };
@@ -91,7 +106,7 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
     return () => window.clearTimeout(timer);
   }, [searchRequest]);
 
-  const allResults = data?.data ?? [];
+  const allResults = data?.data ?? instantResults ?? [];
   const filteredResults = useMemo(
     () => filterAndSortRentalResults(allResults, filters),
     [allResults, filters]
@@ -102,7 +117,8 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
   );
 
   const hasSearched = !!searchRequest;
-  const showResults = hasSearched && isSuccess && !isFetching;
+  const showResults = hasSearched && (instantResults !== null || isSuccess);
+  const showLoading = isFetching && instantResults === null;
 
   return (
     <>
@@ -120,7 +136,7 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
                 <RentalSearchCard
                   values={formValues}
                   errors={formErrors}
-                  loading={isFetching}
+                  loading={isFetching && instantResults === null}
                   onChange={handleFieldChange}
                   onSubmit={handleSearch}
                 />
@@ -141,7 +157,7 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
               className="scroll-mt-24"
               aria-label="Available cars"
             >
-              {isFetching && (
+              {showLoading && (
                 <div className={cn(videoPanel, "border-gray-200 bg-white")}>
                   <p className="mb-6 text-center text-sm font-medium text-gray-600">Searching available cars...</p>
                   <RentalResultsSkeleton />
