@@ -29,6 +29,8 @@ declare module "@auth/core/jwt" {
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  // Keep auth routes at /api/auth even if AUTH_URL includes a page path (e.g. /admin/login).
+  basePath: "/api/auth",
   secret: process.env.AUTH_SECRET,
   providers: [
     Credentials({
