@@ -9,8 +9,19 @@ import { handleRentalBookingStatusChange } from "@/lib/rentals/rental-inventory-
 import { formatRentalPriceSummary } from "@/lib/rentals/pricing";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { parsePricedRentalOptionLines } from "@/lib/rentals/option-catalog";
+import { sendRentalBookingConfirmationEmail } from "@/lib/rentals/rental-booking-email";
 
 export async function confirmRentalBookingWithoutPayment(bookingId: string) {
+  const existing = await prisma.rentalBooking.findUnique({
+    where: { id: bookingId },
+    select: { paymentStatus: true },
+  });
+
+  if (!existing) {
+    throw new Error("Booking not found");
+  }
+
+  const wasAlreadyPaid = existing.paymentStatus === RentalPaymentStatus.PAID;
   const result = await claimRentalBookingPayment(bookingId);
   if (result.cancelledLosers.length > 0) {
     await sendRentalLoserNotifications(
@@ -19,6 +30,12 @@ export async function confirmRentalBookingWithoutPayment(bookingId: string) {
           Boolean(booking.customerEmail)
       )
     );
+  }
+
+  if (!wasAlreadyPaid) {
+    await sendRentalBookingConfirmationEmail(result.confirmed).catch((error) => {
+      console.error("[rental-booking-email]", error);
+    });
   }
 
   return result.confirmed;
@@ -178,6 +195,10 @@ export async function markRentalBookingPaid(sessionId: string) {
       )
     );
   }
+
+  await sendRentalBookingConfirmationEmail(result.confirmed).catch((error) => {
+    console.error("[rental-booking-email]", error);
+  });
 
   return prisma.rentalBooking.update({
     where: { id: bookingId },

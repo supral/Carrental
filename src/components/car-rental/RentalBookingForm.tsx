@@ -473,12 +473,12 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
           disabled={loading}
           className="w-full rounded-lg bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Processing..." : hasSearchTrip ? "Proceed to Payment" : "Submit Rental Request"}
+          {loading ? "Processing..." : hasSearchTrip ? "Confirm Booking" : "Submit Rental Request"}
         </button>
 
         <p className="text-center text-xs text-gray-500">
           {hasSearchTrip
-            ? "You will be redirected to Stripe to complete payment securely after confirming your booking."
+            ? "Your booking will be confirmed immediately and a confirmation email will be sent to you."
             : "By submitting, you agree to be contacted about your rental enquiry."}
         </p>
       </form>

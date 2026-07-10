@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, type ChangeEvent, type ReactElement, type ReactNode } from "react";
-import { Copy, ExternalLink, Mail } from "lucide-react";
+import { Copy, ExternalLink, Loader2, Mail, Send } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -29,6 +29,8 @@ type ContactEmailTriggerProps = {
   dialogTitle?: string;
   dialogDescription?: string;
   asChild?: boolean;
+  /** When "smtp", sends via the server (admin). Default opens Gmail/Outlook compose. */
+  deliveryMode?: "compose" | "smtp";
 };
 
 export default function ContactEmailTrigger({
@@ -38,13 +40,23 @@ export default function ContactEmailTrigger({
   children,
   className,
   dialogTitle = "Send email",
-  dialogDescription = "Choose how you would like to contact this address. This avoids the browser application picker.",
+  dialogDescription,
   asChild = false,
+  deliveryMode = "compose",
 }: ContactEmailTriggerProps) {
   const [open, setOpen] = useState(false);
   const [draftSubject, setDraftSubject] = useState(subject);
   const [draftBody, setDraftBody] = useState(body);
   const [copiedField, setCopiedField] = useState<"email" | "all" | null>(null);
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+  const [sendSuccess, setSendSuccess] = useState(false);
+
+  const resolvedDescription =
+    dialogDescription ??
+    (deliveryMode === "smtp"
+      ? "Send an email from your Everest reservations inbox, or open Gmail or Outlook if you prefer."
+      : "Choose how you would like to contact this address. This avoids the browser application picker.");
 
   async function handleCopy(field: "email" | "all") {
     const text =
@@ -66,6 +78,42 @@ export default function ContactEmailTrigger({
     window.open(url, "_blank", "noopener,noreferrer");
   }
 
+  async function handleSendViaSmtp() {
+    if (!draftSubject.trim() || !draftBody.trim()) {
+      setSendError("Subject and message are required.");
+      return;
+    }
+
+    setSending(true);
+    setSendError(null);
+    setSendSuccess(false);
+
+    try {
+      const response = await fetch("/api/admin/send-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          to: email,
+          subject: draftSubject.trim(),
+          body: draftBody.trim(),
+        }),
+      });
+
+      const result = (await response.json()) as { success?: boolean; error?: string };
+
+      if (!response.ok || !result.success) {
+        setSendError(result.error ?? "Failed to send email.");
+        return;
+      }
+
+      setSendSuccess(true);
+    } catch {
+      setSendError("Failed to send email. Please try again.");
+    } finally {
+      setSending(false);
+    }
+  }
+
   const trigger = asChild ? (
     children
   ) : (
@@ -81,6 +129,8 @@ export default function ContactEmailTrigger({
         if (nextOpen) {
           setDraftSubject(subject);
           setDraftBody(body);
+          setSendError(null);
+          setSendSuccess(false);
         }
         setOpen(nextOpen);
       }}
@@ -92,7 +142,7 @@ export default function ContactEmailTrigger({
             <Mail className="h-5 w-5 text-primary" />
             {dialogTitle}
           </DialogTitle>
-          <DialogDescription>{dialogDescription}</DialogDescription>
+          <DialogDescription>{resolvedDescription}</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
@@ -127,7 +177,18 @@ export default function ContactEmailTrigger({
             />
           </div>
 
+          {sendError && <p className="text-sm text-destructive">{sendError}</p>}
+          {sendSuccess && (
+            <p className="text-sm text-green-700">Email sent successfully from reservations inbox.</p>
+          )}
+
           <div className="flex flex-wrap gap-2">
+            {deliveryMode === "smtp" && (
+              <Button type="button" size="sm" onClick={handleSendViaSmtp} disabled={sending}>
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                {sending ? "Sending…" : "Send email"}
+              </Button>
+            )}
             <Button type="button" variant="outline" size="sm" onClick={() => handleCopy("email")}>
               <Copy className="h-4 w-4" />
               {copiedField === "email" ? "Copied" : "Copy email"}
@@ -136,11 +197,16 @@ export default function ContactEmailTrigger({
               <Copy className="h-4 w-4" />
               {copiedField === "all" ? "Copied" : "Copy details"}
             </Button>
-            <Button type="button" size="sm" onClick={() => openCompose("gmail")}>
+            <Button type="button" variant={deliveryMode === "smtp" ? "outline" : "default"} size="sm" onClick={() => openCompose("gmail")}>
               <ExternalLink className="h-4 w-4" />
               Open Gmail
             </Button>
-            <Button type="button" variant="secondary" size="sm" onClick={() => openCompose("outlook")}>
+            <Button
+              type="button"
+              variant={deliveryMode === "smtp" ? "outline" : "secondary"}
+              size="sm"
+              onClick={() => openCompose("outlook")}
+            >
               <ExternalLink className="h-4 w-4" />
               Open Outlook
             </Button>

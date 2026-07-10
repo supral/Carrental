@@ -126,17 +126,17 @@ html {
 }
 
 .our-car-card {
-  width: 100cqw;
+  width: min(100cqw, 22rem);
 }
 
 @container (min-width: 768px) {
   .our-car-card {
-    width: calc((100cqw - 1.25rem) / 2);
+    width: min(calc((100cqw - 1.5rem) / 2), 24rem);
   }
 }
 
 @container (min-width: 1024px) {
   .our-car-card {
-    width: calc((100cqw - 2.5rem) / 3);
+    width: min(calc((100cqw - 3rem) / 3), 22rem);
   }
 }

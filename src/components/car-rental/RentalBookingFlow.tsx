@@ -181,7 +181,7 @@ export default function RentalBookingFlow({
           </Link>
           <h1 className="mt-3 text-3xl font-bold text-gray-900">Complete Your Rental</h1>
           <p className="mt-2 text-gray-600">
-            Choose protection and extras for <strong>{vehicleTitle}</strong>, then continue to secure payment.
+            Choose protection and extras for <strong>{vehicleTitle}</strong>, then complete your booking.
           </p>
         </div>
 
@@ -266,7 +266,7 @@ export default function RentalBookingFlow({
         <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div>
             <h2 className="text-xl font-bold text-gray-900">Driver Details</h2>
-            <p className="mt-1 text-sm text-gray-600">Enter your details to proceed to payment.</p>
+            <p className="mt-1 text-sm text-gray-600">Enter your details to confirm your booking.</p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -394,7 +394,7 @@ export default function RentalBookingFlow({
               ? "Unavailable for Selected Dates"
               : loading
                 ? "Processing..."
-                : `Proceed to Payment · ${formatPrice(breakdown.totalAmountCents / 100)}`}
+                : `Confirm Booking · ${formatPrice(breakdown.totalAmountCents / 100)}`}
           </button>
         </form>
       </div>

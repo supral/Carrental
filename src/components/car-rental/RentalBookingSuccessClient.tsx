@@ -62,7 +62,7 @@ export default function RentalBookingSuccessClient() {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
         <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
-          <p className="text-gray-600">Confirming your payment...</p>
+          <p className="text-gray-600">Confirming your booking...</p>
         </div>
       </div>
     );
@@ -92,9 +92,12 @@ export default function RentalBookingSuccessClient() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Booking confirmed &amp; paid</h1>
+        <h1 className="text-2xl font-bold text-gray-900">Booking confirmed</h1>
         <p className="mt-3 text-gray-600">
           Your rental for <strong>{booking.vehicleName}</strong> is confirmed.
+        </p>
+        <p className="mt-2 text-sm text-gray-600">
+          A confirmation email has been sent to your inbox with your booking details.
         </p>
           <div className="mt-6 rounded-xl border border-green-100 bg-white p-5 text-left text-sm text-gray-700">
             <p>

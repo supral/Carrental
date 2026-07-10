@@ -28,6 +28,30 @@ export default function OurCarsCarousel({ vehicles, onContinue }: OurCarsCarouse
     return null;
   }
 
+  if (!canAutoScroll) {
+    return (
+      <div
+        className={
+          vehicles.length === 1
+            ? "mx-auto max-w-md"
+            : vehicles.length === 2
+              ? "grid grid-cols-1 gap-6 md:grid-cols-2"
+              : "grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3"
+        }
+      >
+        {vehicles.map((vehicle, index) => (
+          <OurCarCard
+            key={vehicle.id}
+            vehicle={vehicle}
+            onContinue={onContinue}
+            className="w-full"
+            priority={index < 3}
+          />
+        ))}
+      </div>
+    );
+  }
+
   return (
     <div className="relative">
       <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-10 bg-gradient-to-r from-white to-transparent sm:w-16" />
@@ -35,12 +59,8 @@ export default function OurCarsCarousel({ vehicles, onContinue }: OurCarsCarouse
 
       <div className="our-cars-viewport overflow-hidden">
         <div
-          className={canAutoScroll ? "our-cars-track flex gap-5 py-1" : "flex gap-5 overflow-x-auto py-1"}
-          style={
-            canAutoScroll
-              ? ({ "--our-cars-duration": `${durationSeconds}s` } as CSSProperties)
-              : undefined
-          }
+          className="our-cars-track flex gap-6 py-1"
+          style={{ "--our-cars-duration": `${durationSeconds}s` } as CSSProperties}
         >
           {items.map((vehicle, index) => (
             <OurCarCard

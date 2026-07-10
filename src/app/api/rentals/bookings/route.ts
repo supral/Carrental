@@ -73,6 +73,10 @@ export async function POST(request: NextRequest) {
         const confirmed = await confirmRentalBookingWithoutPayment(booking.id);
         const baseUrl = getAppBaseUrl();
 
+        console.log(
+          `[rental-booking] Stripe bypassed — booking ${confirmed.id} confirmed, confirmation email sent to ${confirmed.customerEmail ?? "n/a"}`
+        );
+
         return NextResponse.json({
           success: true,
           data: {

@@ -90,6 +90,7 @@ export default function AdminLeadsList({ leads }: { leads: LeadRecord[] }) {
                     subject={emailSubject}
                     body={emailBody}
                     dialogTitle="Email customer"
+                    deliveryMode="smtp"
                     className="text-primary hover:underline"
                   >
                     {lead.email}
@@ -111,6 +112,7 @@ export default function AdminLeadsList({ leads }: { leads: LeadRecord[] }) {
                     subject={emailSubject}
                     body={emailBody}
                     dialogTitle="Email customer"
+                    deliveryMode="smtp"
                     asChild
                   >
                     <Button type="button">Email customer</Button>

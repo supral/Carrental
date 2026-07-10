@@ -11,10 +11,12 @@ function getSmtpConfig() {
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
   const from = process.env.SMTP_FROM || process.env.SMTP_USER || "reservations@everestcarrental.com";
+  const secure =
+    process.env.SMTP_SECURE === "true" || process.env.SMTP_SECURE === "1" || port === 465;
 
   if (!host || !user || !pass) return null;
 
-  return { host, port, user, pass, from };
+  return { host, port, user, pass, from, secure };
 }
 
 export function isEmailConfigured(): boolean {
@@ -38,11 +40,19 @@ export async function sendEmail({ to, subject, text, html }: SendEmailInput): Pr
   const transporter = nodemailer.createTransport({
     host: smtp.host,
     port: smtp.port,
-    secure: smtp.port === 465,
+    secure: smtp.secure,
     auth: {
       user: smtp.user,
       pass: smtp.pass,
     },
+    ...(smtp.secure
+      ? {}
+      : {
+          requireTLS: true,
+          tls: {
+            minVersion: "TLSv1.2",
+          },
+        }),
   });
 
   await transporter.sendMail({

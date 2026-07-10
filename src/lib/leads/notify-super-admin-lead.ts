@@ -17,6 +17,8 @@ const PUBLIC_FORM_TYPES = new Set<FormType>([
   "contact",
   "auto-parts",
   "service-booking",
+  "car-rental",
+  "vehicle-enquiry",
 ]);
 
 export function shouldNotifySuperAdminForForm(formType: FormType): boolean {
