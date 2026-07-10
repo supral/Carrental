@@ -2,12 +2,8 @@ import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 import RentalBookingFlow from "@/components/car-rental/RentalBookingFlow";
 import FleetAvailabilityPanel from "@/components/car-rental/FleetAvailabilityPanel";
-import { getPublicRentalVehicleById } from "@/lib/vehicles/public-vehicle-service";
-import { parseVehicleRentalOptions } from "@/lib/rentals/option-catalog";
-import { prisma } from "@/lib/prisma";
-import { ListingPurpose, VehicleStatus } from "@prisma/client";
 import { combineDateAndTime } from "@/lib/rentals/search-validation";
-import { getFleetAvailability } from "@/lib/rentals/fleet-inventory";
+import { getRentalBookPageData } from "@/lib/rentals/rental-book-page-data";
 
 export const dynamic = "force-dynamic";
 
@@ -52,12 +48,15 @@ export default async function RentalBookPage({ params, searchParams }: PageProps
     redirect(`/car-rental/${id}`);
   }
 
-  const vehicle = await getPublicRentalVehicleById(id);
-  if (!vehicle) notFound();
-
   const pickupAt = combineDateAndTime(bookingContext.pickupDate, bookingContext.pickupTime);
   const dropoffAt = combineDateAndTime(bookingContext.dropoffDate, bookingContext.dropoffTime);
-  const fleetAvailability = await getFleetAvailability(id, { pickupAt, dropoffAt });
+
+  const pageData = await getRentalBookPageData(id, pickupAt, dropoffAt);
+  if (!pageData) {
+    notFound();
+  }
+
+  const { vehicle, vehicleOptions, fleetAvailability } = pageData;
 
   if (fleetAvailability.availableUnits <= 0) {
     return (
@@ -77,17 +76,6 @@ export default async function RentalBookPage({ params, searchParams }: PageProps
       </div>
     );
   }
-
-  const dbVehicle = await prisma.vehicle.findFirst({
-    where: {
-      id,
-      status: VehicleStatus.ACTIVE,
-      listingPurpose: ListingPurpose.RENTAL,
-    },
-    select: { rentalOptions: true },
-  });
-
-  const vehicleOptions = parseVehicleRentalOptions(dbVehicle?.rentalOptions);
 
   return (
     <div className="bg-gray-50 py-10 lg:py-14">
