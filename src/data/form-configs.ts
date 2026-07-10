@@ -69,7 +69,6 @@ export const formConfigs: Record<FormType, { title: string; subtitle: string; fi
           { value: "van", label: "Van" },
         ],
       },
-      { name: "drivingLicenceNumber", label: "Driving Licence Number (optional)", type: "text", required: false, placeholder: "Licence number" },
       { name: "pickupDate", label: "Pickup Date", type: "date", required: true },
       { name: "returnDate", label: "Return Date", type: "date", required: true },
       { name: "message", label: "Additional Notes", type: "textarea", required: false, placeholder: "Any special requirements..." },

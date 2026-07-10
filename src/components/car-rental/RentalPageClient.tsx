@@ -10,7 +10,7 @@ import RentalResultsSkeleton from "@/components/car-rental/results/RentalResults
 import RentalEmptyState from "@/components/car-rental/results/RentalEmptyState";
 import RentalResultCard from "@/components/car-rental/results/RentalResultCard";
 import { VideoPageContext } from "@/components/layout/VideoPageContext";
-import { dealershipLocation } from "@/lib/rentals/locations";
+import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
 import {
   filterAndSortRentalResults,
   paginateResults,
@@ -30,10 +30,10 @@ import type {
 import type { Vehicle } from "@/types";
 
 const defaultFormValues: RentalSearchFormValues = {
-  pickupAddress: dealershipLocation.address,
+  pickupAddress: DEFAULT_RENTAL_ADDRESS,
   pickupDate: "",
   pickupTime: "",
-  dropoffAddress: dealershipLocation.address,
+  dropoffAddress: DEFAULT_RENTAL_ADDRESS,
   dropoffDate: "",
   dropoffTime: "",
 };

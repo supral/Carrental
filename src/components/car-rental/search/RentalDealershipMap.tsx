@@ -3,6 +3,7 @@
 import { ExternalLink } from "lucide-react";
 import SiteMapEmbed from "@/components/shared/SiteMapEmbed";
 import { dealershipLocation, getSiteMapDirectionsUrl } from "@/lib/site-map";
+import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
 import { cn } from "@/lib/utils";
 
 interface RentalDealershipMapProps {
@@ -18,8 +19,8 @@ export default function RentalDealershipMap({
   onSelectPickup,
   onSelectDropoff,
 }: RentalDealershipMapProps) {
-  const pickupSelected = pickupAddress.trim() === dealershipLocation.address;
-  const dropoffSelected = dropoffAddress.trim() === dealershipLocation.address;
+  const pickupSelected = pickupAddress.trim() === DEFAULT_RENTAL_ADDRESS;
+  const dropoffSelected = dropoffAddress.trim() === DEFAULT_RENTAL_ADDRESS;
 
   return (
     <div className="overflow-hidden rounded-[18px] border border-gray-200 bg-white shadow-sm">

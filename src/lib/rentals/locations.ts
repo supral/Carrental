@@ -1,6 +1,9 @@
 /** Predefined pickup/drop-off locations — primary location matches homepage map */
 import { dealershipLocation } from "@/lib/site-map";
 
+/** Default pickup/drop-off text shown in rental search and booking forms */
+export const DEFAULT_RENTAL_ADDRESS = "Darwin, NT";
+
 export const RENTAL_LOCATIONS = [
   dealershipLocation,
   {

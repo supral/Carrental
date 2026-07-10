@@ -1,9 +1,8 @@
 "use client";
 
-import { useMemo, useRef, useState, FormEvent, ChangeEvent } from "react";
+import { useMemo, useState, FormEvent } from "react";
 import Link from "next/link";
 import { format } from "date-fns";
-import { uploadLicencePhoto } from "@/lib/api";
 import { createRentalBookingRequest } from "@/lib/rentals/rental-api";
 import { combineDateAndTime, normalizeTimeValue } from "@/lib/rentals/search-validation";
 import { calculateBookingPrice } from "@/lib/rentals/price-calculator";
@@ -89,9 +88,6 @@ export default function RentalBookingFlow({
   const [selections, setSelections] = useState<SelectionState>(() => buildInitialSelections(enabledOptions));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [licenceFile, setLicenceFile] = useState<File | null>(null);
-  const [licencePreview, setLicencePreview] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const pickupAt = combineDateAndTime(bookingContext.pickupDate, bookingContext.pickupTime);
   const dropoffAt = combineDateAndTime(bookingContext.dropoffDate, bookingContext.dropoffTime);
@@ -113,17 +109,6 @@ export default function RentalBookingFlow({
     }));
   };
 
-  const handleLicenceChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      setLicenceFile(null);
-      setLicencePreview(null);
-      return;
-    }
-    setLicenceFile(file);
-    setLicencePreview(file.type.startsWith("image/") ? URL.createObjectURL(file) : null);
-  };
-
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -136,11 +121,6 @@ export default function RentalBookingFlow({
     });
 
     try {
-      const licencePhotoUrl = licenceFile ? await uploadLicencePhoto(licenceFile) : undefined;
-      const drivingLicenceNumber = data.drivingLicenceNumber?.trim()
-        ? data.drivingLicenceNumber.trim().toUpperCase()
-        : undefined;
-
       const response = await createRentalBookingRequest({
         vehicleId: vehicle.id,
         pickupAddress: bookingContext.pickupAddress,
@@ -154,8 +134,6 @@ export default function RentalBookingFlow({
         customerZip: data.zip,
         customerDob: data.dob,
         customerCountry: data.country,
-        drivingLicenceNumber,
-        licencePhotoUrl,
         notes: data.message,
         selectedOptions: selectionsToPayload(selections),
       });
@@ -337,40 +315,6 @@ export default function RentalBookingFlow({
                 placeholder="Country"
                 className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
-            </div>
-          </div>
-
-          <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-gray-900">
-              Driving Licence <span className="font-normal normal-case text-gray-500">(optional)</span>
-            </h3>
-            <div className="mt-4 space-y-4">
-              <div>
-                <label htmlFor="drivingLicenceNumber" className="mb-1 block text-sm font-medium text-gray-700">
-                  Licence Number
-                </label>
-                <input
-                  id="drivingLicenceNumber"
-                  name="drivingLicenceNumber"
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm uppercase outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-                />
-              </div>
-              <div>
-                <label htmlFor="licencePhoto" className="mb-1 block text-sm font-medium text-gray-700">
-                  Licence Photo
-                </label>
-                <input
-                  ref={fileInputRef}
-                  id="licencePhoto"
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp,application/pdf"
-                  onChange={handleLicenceChange}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-3 text-sm"
-                />
-                {licencePreview && (
-                  <img src={licencePreview} alt="Licence preview" className="mt-3 h-28 rounded-lg border object-cover" />
-                )}
-              </div>
             </div>
           </div>
 

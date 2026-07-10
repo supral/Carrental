@@ -1,30 +1,12 @@
 "use client";
 
-import { useRef, useState, FormEvent, ChangeEvent } from "react";
-import { submitForm, uploadLicencePhoto } from "@/lib/api";
+import { useState, FormEvent } from "react";
+import { submitForm } from "@/lib/api";
 
 export default function CarRentalGeneralForm({ className = "" }: { className?: string }) {
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [licenceFile, setLicenceFile] = useState<File | null>(null);
-  const [licencePreview, setLicencePreview] = useState<string | null>(null);
   const [submitted, setSubmitted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const handleLicenceChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      setLicenceFile(null);
-      setLicencePreview(null);
-      return;
-    }
-    setLicenceFile(file);
-    if (file.type.startsWith("image/")) {
-      setLicencePreview(URL.createObjectURL(file));
-    } else {
-      setLicencePreview(null);
-    }
-  };
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -38,19 +20,8 @@ export default function CarRentalGeneralForm({ className = "" }: { className?: s
     });
 
     try {
-      if (licenceFile) {
-        data.licencePhotoUrl = await uploadLicencePhoto(licenceFile);
-      }
-      if (data.drivingLicenceNumber?.trim()) {
-        data.drivingLicenceNumber = data.drivingLicenceNumber.trim().toUpperCase();
-      } else {
-        delete data.drivingLicenceNumber;
-      }
       await submitForm("car-rental", data);
       setSubmitted(true);
-      setLicenceFile(null);
-      setLicencePreview(null);
-      if (fileInputRef.current) fileInputRef.current.value = "";
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to submit. Please try again.");
     } finally {
@@ -103,22 +74,6 @@ export default function CarRentalGeneralForm({ className = "" }: { className?: s
           <option value="ute">Ute / 4WD</option>
           <option value="van">Van</option>
         </select>
-      </div>
-      <div>
-        <label htmlFor="drivingLicenceNumber" className="mb-1 block text-sm font-medium text-gray-700">Driving Licence Number (optional)</label>
-        <input id="drivingLicenceNumber" name="drivingLicenceNumber" type="text" className={`${inputClass} uppercase`} />
-      </div>
-      <div>
-        <label htmlFor="licencePhoto" className="mb-1 block text-sm font-medium text-gray-700">Driving Licence Photo (optional)</label>
-        <input
-          ref={fileInputRef}
-          id="licencePhoto"
-          type="file"
-          accept="image/jpeg,image/png,image/webp,application/pdf"
-          onChange={handleLicenceChange}
-          className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-accent-foreground"
-        />
-        {licencePreview && <img src={licencePreview} alt="Licence preview" className="mt-3 h-28 rounded-lg border object-cover" />}
       </div>
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <div>

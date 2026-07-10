@@ -10,7 +10,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { dealershipLocation } from "@/lib/rentals/locations";
+import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
 import { buildRentalDetailUrl } from "@/lib/rentals/filter-utils";
 import { getRentalCarTitle } from "@/lib/rentals/our-cars-display";
 import { validateRentalSearchForm } from "@/lib/rentals/search-validation";
@@ -56,8 +56,8 @@ export default function RentalDateRangeDialog({
 
   const handleContinue = () => {
     const values: RentalSearchFormValues = {
-      pickupAddress: dealershipLocation.address,
-      dropoffAddress: dealershipLocation.address,
+      pickupAddress: DEFAULT_RENTAL_ADDRESS,
+      dropoffAddress: DEFAULT_RENTAL_ADDRESS,
       ...dates,
     };
 

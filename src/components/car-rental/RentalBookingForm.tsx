@@ -1,12 +1,11 @@
 "use client";
 
-import { useRef, useState, FormEvent, ChangeEvent, useEffect, useMemo } from "react";
+import { useState, FormEvent, useEffect, useMemo } from "react";
 import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
-import { uploadLicencePhoto } from "@/lib/api";
 import { createRentalBookingRequest } from "@/lib/rentals/rental-api";
 import { combineDateAndTime, normalizeTimeValue } from "@/lib/rentals/search-validation";
 import { calculateRentalDays } from "@/lib/rentals/pricing";
-import { dealershipLocation } from "@/lib/rentals/locations";
+import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
 import { Vehicle } from "@/types";
 import type { RentalBookingContext } from "@/types/rental";
 import { formatPrice } from "@/lib/utils";
@@ -20,8 +19,8 @@ interface RentalBookingFormProps {
 
 function tripDetailsFromContext(context?: RentalBookingContext) {
   return {
-    pickupAddress: context?.pickupAddress ?? dealershipLocation.address,
-    dropoffAddress: context?.dropoffAddress ?? dealershipLocation.address,
+    pickupAddress: context?.pickupAddress ?? DEFAULT_RENTAL_ADDRESS,
+    dropoffAddress: context?.dropoffAddress ?? DEFAULT_RENTAL_ADDRESS,
     pickupDate: context?.pickupDate ?? "",
     pickupTime: context?.pickupTime ? normalizeTimeValue(context.pickupTime) : "09:00",
     dropoffDate: context?.dropoffDate ?? "",
@@ -42,9 +41,6 @@ function hasCompleteTrip(tripDetails: ReturnType<typeof tripDetailsFromContext>)
 
 export default function RentalBookingForm({ vehicle, bookingContext, className = "" }: RentalBookingFormProps) {
   const vehicleTitle = formatVehicleName(vehicle);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const [licenceFile, setLicenceFile] = useState<File | null>(null);
-  const [licencePreview, setLicencePreview] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tripDetails, setTripDetails] = useState(() => tripDetailsFromContext(bookingContext));
@@ -77,21 +73,6 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
     setTripDetails((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleLicenceChange = (e: ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) {
-      setLicenceFile(null);
-      setLicencePreview(null);
-      return;
-    }
-    setLicenceFile(file);
-    if (file.type.startsWith("image/")) {
-      setLicencePreview(URL.createObjectURL(file));
-    } else {
-      setLicencePreview(null);
-    }
-  };
-
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setLoading(true);
@@ -118,11 +99,6 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
         throw new Error("Drop-off must be after pickup.");
       }
 
-      const licencePhotoUrl = licenceFile ? await uploadLicencePhoto(licenceFile) : undefined;
-      const drivingLicenceNumber = data.drivingLicenceNumber?.trim()
-        ? data.drivingLicenceNumber.trim().toUpperCase()
-        : undefined;
-
       const response = await createRentalBookingRequest({
         vehicleId: vehicle.id,
         pickupAddress: tripDetails.pickupAddress.trim(),
@@ -136,8 +112,6 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
         customerZip: data.zip,
         customerDob: data.dob,
         customerCountry: data.country,
-        drivingLicenceNumber,
-        licencePhotoUrl,
         notes: data.message,
       });
 
@@ -340,56 +314,6 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
             className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
           />
         </div>
-
-        <section className="rounded-lg border border-gray-200 bg-gray-50 p-4 sm:p-5">
-          <h4 className="mb-4 text-sm font-semibold uppercase tracking-wide text-gray-900">
-            Driving Licence <span className="font-normal normal-case text-gray-500">(optional)</span>
-          </h4>
-
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="drivingLicenceNumber" className="mb-1 block text-sm font-medium text-gray-700">
-                Licence Number
-              </label>
-              <input
-                id="drivingLicenceNumber"
-                name="drivingLicenceNumber"
-                type="text"
-                placeholder="Enter your driving licence number"
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm uppercase outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="licencePhoto" className="mb-1 block text-sm font-medium text-gray-700">
-                Licence Photo
-              </label>
-              <input
-                ref={fileInputRef}
-                id="licencePhoto"
-                name="licencePhoto"
-                type="file"
-                accept="image/jpeg,image/png,image/webp,application/pdf"
-                onChange={handleLicenceChange}
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm file:mr-4 file:rounded-md file:border-0 file:bg-accent file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-accent-foreground"
-              />
-              <p className="mt-1 text-xs text-gray-500">
-                Optional — upload a clear photo of your licence (JPG, PNG, WEBP, or PDF, max 5MB).
-              </p>
-              {licencePreview && (
-                <img
-                  src={licencePreview}
-                  alt="Licence preview"
-                  className="mt-3 h-28 rounded-lg border border-gray-200 object-cover"
-                />
-              )}
-              {licenceFile && !licencePreview && (
-                <p className="mt-2 text-sm text-gray-600">Selected: {licenceFile.name}</p>
-              )}
-            </div>
-          </div>
-        </section>
-
 
         <div>
           <label htmlFor="message" className="mb-1 block text-sm font-medium text-gray-700">

@@ -1,7 +1,7 @@
 "use client";
 
 import { MapPin } from "lucide-react";
-import { dealershipLocation } from "@/lib/site-map";
+import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
 import { cn } from "@/lib/utils";
 
 interface RentalAddressInputProps {
@@ -45,7 +45,7 @@ export default function RentalAddressInput({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          placeholder={dealershipLocation.address}
+          placeholder={DEFAULT_RENTAL_ADDRESS}
           required={required}
           className="min-w-0 flex-1 border-0 bg-transparent py-3 pr-4 text-sm outline-none placeholder:text-gray-400"
         />

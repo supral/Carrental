@@ -1,10 +1,11 @@
 import type { Vehicle } from "@/types";
+import { FLEET_STOCK_IMAGE_URLS } from "@/lib/rentals/fleet-stock-images";
 
 const FLEET_STOCK_IMAGES = {
-  mgZs: "/images/fleet/mg-zs.png",
-  pradoGx: "/images/fleet/toyota-prado-gx.png",
-  pradoGxl: "/images/fleet/toyota-prado-gxl.png",
-  haval: "/images/fleet/gwm-haval.png",
+  mgZs: FLEET_STOCK_IMAGE_URLS["mg-zs"],
+  pradoGx: FLEET_STOCK_IMAGE_URLS["toyota-prado-gx"],
+  pradoGxl: FLEET_STOCK_IMAGE_URLS["toyota-prado-gxl"],
+  haval: FLEET_STOCK_IMAGE_URLS["gwm-haval"],
 } as const;
 
 function vehicleSearchText(vehicle: Vehicle): string {

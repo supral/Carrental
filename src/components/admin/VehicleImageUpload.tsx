@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import MediaLibraryPicker from "@/components/admin/MediaLibraryPicker";
+import FleetStockImagePicker from "@/components/admin/FleetStockImagePicker";
 
 interface VehicleImageUploadProps {
   images: string[];
@@ -45,6 +46,7 @@ export default function VehicleImageUpload({
   const [uploadError, setUploadError] = useState("");
   const [urlInput, setUrlInput] = useState("");
   const [libraryOpen, setLibraryOpen] = useState(false);
+  const [fleetBrowseOpen, setFleetBrowseOpen] = useState(false);
 
   const setUploadState = (value: boolean) => {
     setUploading(value);
@@ -134,9 +136,18 @@ export default function VehicleImageUpload({
             type="button"
             variant="outline"
             disabled={uploading}
+            onClick={() => setFleetBrowseOpen(true)}
+          >
+            <Images className="h-4 w-4" />
+            Browse
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={uploading}
             onClick={() => inputRef.current?.click()}
           >
-            Browse Files
+            Upload from device
           </Button>
           <Button
             type="button"
@@ -144,7 +155,6 @@ export default function VehicleImageUpload({
             disabled={uploading}
             onClick={() => setLibraryOpen(true)}
           >
-            <Images className="h-4 w-4" />
             Image library
           </Button>
         </div>
@@ -188,7 +198,7 @@ export default function VehicleImageUpload({
                   alt={`Vehicle image ${index + 1}`}
                   fill
                   className="object-cover"
-                  unoptimized={url.startsWith("/uploads/")}
+                  unoptimized={url.startsWith("/uploads/") || url.startsWith("/images/")}
                 />
                 {index === 0 && (
                   <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-primary px-2 py-0.5 text-[10px] font-semibold text-primary-foreground">
@@ -224,6 +234,16 @@ export default function VehicleImageUpload({
       {(error || uploadError) && (
         <p className="text-sm text-red-600">{error || uploadError}</p>
       )}
+
+      <FleetStockImagePicker
+        open={fleetBrowseOpen}
+        onOpenChange={setFleetBrowseOpen}
+        selectedUrls={images}
+        onSelect={(urls) => {
+          onChange([...images, ...urls]);
+          setUploadError("");
+        }}
+      />
 
       <MediaLibraryPicker
         open={libraryOpen}
