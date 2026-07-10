@@ -1,7 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { ListingPurpose, VehicleStatus } from "@prisma/client";
 import { countActiveReservations, type FleetAvailability } from "@/lib/rentals/fleet-inventory";
-import { parseVehicleRentalOptions, type VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
+import { getDynamicVehicleRentalOptions } from "@/lib/rentals/dynamic-rental-options";
+import type { VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
 import type { Vehicle } from "@/types";
 
 const rentalBookingVehicleSelect = {
@@ -22,7 +23,6 @@ const rentalBookingVehicleSelect = {
   location: true,
   totalUnits: true,
   availableUnits: true,
-  rentalOptions: true,
   dealer: { select: { name: true, phone: true } },
   images: { orderBy: { order: "asc" as const }, take: 1, select: { url: true } },
 } as const;
@@ -97,7 +97,7 @@ export async function getRentalBookPageData(
   pickupAt: Date,
   dropoffAt: Date
 ): Promise<RentalBookPageData | null> {
-  const [vehicleRow, reservedForRange] = await Promise.all([
+  const [vehicleRow, reservedForRange, vehicleOptions] = await Promise.all([
     prisma.vehicle.findFirst({
       where: {
         id: vehicleId,
@@ -107,6 +107,7 @@ export async function getRentalBookPageData(
       select: rentalBookingVehicleSelect,
     }),
     countActiveReservations(vehicleId, { pickupAt, dropoffAt }),
+    getDynamicVehicleRentalOptions(vehicleId),
   ]);
 
   if (!vehicleRow) {
@@ -115,7 +116,7 @@ export async function getRentalBookPageData(
 
   return {
     vehicle: mapToBookingVehicle(vehicleRow),
-    vehicleOptions: parseVehicleRentalOptions(vehicleRow.rentalOptions),
+    vehicleOptions,
     fleetAvailability: buildFleetAvailability(vehicleRow, reservedForRange),
   };
 }
