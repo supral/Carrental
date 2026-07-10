@@ -2,6 +2,7 @@ import { NotificationType, Role, UserStatus, type Lead } from "@prisma/client";
 import { siteConfig } from "@/data/services";
 import { sendEmail } from "@/lib/email";
 import { formatLeadDetailsForEmail } from "@/lib/leads/lead-message";
+import { getAppBaseUrl } from "@/lib/stripe";
 import { prisma } from "@/lib/prisma";
 import type { FormType } from "@/types";
 
@@ -26,10 +27,7 @@ export function shouldNotifySuperAdminForForm(formType: FormType): boolean {
 }
 
 function getAdminBaseUrl(): string {
-  return (process.env.AUTH_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(
-    /\/$/,
-    ""
-  );
+  return getAppBaseUrl();
 }
 
 function buildEmailContent(lead: Lead, formType: FormType, formData: Record<string, string>) {

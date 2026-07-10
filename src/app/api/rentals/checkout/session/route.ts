@@ -1,50 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { RentalPaymentStatus } from "@prisma/client";
-import { prisma } from "@/lib/prisma";
 import { markRentalBookingPaid } from "@/lib/rentals/stripe-checkout";
+import {
+  formatRentalBookingConfirmation,
+  loadRentalBookingConfirmation,
+} from "@/lib/rentals/booking-confirmation";
 import { RentalUnavailableError } from "@/lib/rentals/rental-errors";
-import { formatVehicleName } from "@/lib/vehicles/display";
-import { parsePricedRentalOptionLines } from "@/lib/rentals/option-catalog";
 
 export const dynamic = "force-dynamic";
-
-function formatBookingConfirmation(booking: {
-  id: string;
-  status: string;
-  paymentStatus: string;
-  rentalDays: number;
-  baseAmountCents: number;
-  extrasAmountCents: number;
-  taxAmountCents: number;
-  totalAmountCents: number;
-  selectedOptions: unknown;
-  currency: string;
-  pickupAt: Date;
-  dropoffAt: Date;
-  vehicle: {
-    title: string | null;
-    make: string;
-    model: string;
-    year: number;
-    vehicleNumber: string | null;
-  };
-}) {
-  return {
-    id: booking.id,
-    status: booking.status,
-    paymentStatus: booking.paymentStatus,
-    rentalDays: booking.rentalDays,
-    baseAmountCents: booking.baseAmountCents,
-    extrasAmountCents: booking.extrasAmountCents,
-    taxAmountCents: booking.taxAmountCents,
-    totalAmountCents: booking.totalAmountCents,
-    optionLines: parsePricedRentalOptionLines(booking.selectedOptions),
-    currency: booking.currency,
-    pickupAt: booking.pickupAt.toISOString(),
-    dropoffAt: booking.dropoffAt.toISOString(),
-    vehicleName: formatVehicleName(booking.vehicle),
-  };
-}
 
 export async function GET(request: NextRequest) {
   const sessionId = request.nextUrl.searchParams.get("session_id");
@@ -59,32 +21,15 @@ export async function GET(request: NextRequest) {
 
   try {
     if (bookingId) {
-      const booking = await prisma.rentalBooking.findUnique({
-        where: { id: bookingId },
-        include: {
-          vehicle: {
-            select: {
-              title: true,
-              make: true,
-              model: true,
-              year: true,
-              vehicleNumber: true,
-            },
-          },
-        },
-      });
+      const result = await loadRentalBookingConfirmation(bookingId);
 
-      if (!booking) {
-        return NextResponse.json({ success: false, error: "Booking not found" }, { status: 404 });
-      }
-
-      if (booking.paymentStatus !== RentalPaymentStatus.PAID) {
-        return NextResponse.json({ success: false, error: "Payment not completed" }, { status: 400 });
+      if (result.error) {
+        return NextResponse.json({ success: false, error: result.error }, { status: 400 });
       }
 
       return NextResponse.json({
         success: true,
-        data: formatBookingConfirmation(booking),
+        data: result.data,
       });
     }
 
@@ -96,7 +41,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
-      data: formatBookingConfirmation(booking),
+      data: formatRentalBookingConfirmation(booking),
     });
   } catch (error) {
     if (error instanceof RentalUnavailableError) {

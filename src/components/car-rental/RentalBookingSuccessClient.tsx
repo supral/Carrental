@@ -4,36 +4,30 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
+import type { RentalBookingConfirmation } from "@/lib/rentals/booking-confirmation";
 import { formatPrice } from "@/lib/utils";
 
-interface BookingSummary {
-  id: string;
-  vehicleName: string;
-  rentalDays: number;
-  baseAmountCents: number;
-  extrasAmountCents: number;
-  taxAmountCents: number;
-  totalAmountCents: number;
-  pickupAt: string;
-  dropoffAt: string;
-  optionLines: Array<{
-    type: string;
-    category: "insurance" | "extra";
-    label: string;
-    quantity: number;
-    lineTotalCents: number;
-  }>;
+interface RentalBookingSuccessClientProps {
+  initialBooking?: RentalBookingConfirmation;
+  initialError?: string;
 }
 
-export default function RentalBookingSuccessClient() {
+export default function RentalBookingSuccessClient({
+  initialBooking,
+  initialError,
+}: RentalBookingSuccessClientProps) {
   const searchParams = useSearchParams();
   const sessionId = searchParams.get("session_id");
   const bookingId = searchParams.get("booking_id");
-  const [booking, setBooking] = useState<BookingSummary | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [booking, setBooking] = useState<RentalBookingConfirmation | null>(initialBooking ?? null);
+  const [error, setError] = useState<string | null>(initialError ?? null);
+  const [loading, setLoading] = useState(!initialBooking && !initialError);
 
   useEffect(() => {
+    if (initialBooking || initialError) {
+      return;
+    }
+
     if (!sessionId && !bookingId) {
       setError("Missing booking reference.");
       setLoading(false);
@@ -56,7 +50,7 @@ export default function RentalBookingSuccessClient() {
         setError(err instanceof Error ? err.message : "Could not verify payment");
       })
       .finally(() => setLoading(false));
-  }, [sessionId, bookingId]);
+  }, [sessionId, bookingId, initialBooking, initialError]);
 
   if (loading) {
     return (
@@ -72,7 +66,7 @@ export default function RentalBookingSuccessClient() {
     return (
       <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
         <div className="rounded-2xl border border-primary/20 bg-accent p-10 text-center">
-          <h1 className="text-2xl font-bold text-gray-900">Payment verification issue</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Booking verification issue</h1>
           <p className="mt-3 text-gray-600">{error}</p>
           <Link href="/car-rental" className="mt-6 inline-block font-semibold text-primary hover:text-primary/80">
             Back to car rental
@@ -92,56 +86,59 @@ export default function RentalBookingSuccessClient() {
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-gray-900">Booking confirmed</h1>
-        <p className="mt-3 text-gray-600">
+        <h1 className="text-2xl font-bold text-gray-900">Booking completed</h1>
+        <p className="mt-3 text-lg text-gray-700">
           Your rental for <strong>{booking.vehicleName}</strong> is confirmed.
         </p>
         <p className="mt-2 text-sm text-gray-600">
           A confirmation email has been sent to your inbox with your booking details.
         </p>
-          <div className="mt-6 rounded-xl border border-green-100 bg-white p-5 text-left text-sm text-gray-700">
-            <p>
-              <span className="font-semibold text-gray-900">Pickup:</span>{" "}
-              {format(new Date(booking.pickupAt), "dd MMM yyyy, HH:mm")}
-            </p>
-            <p className="mt-2">
-              <span className="font-semibold text-gray-900">Drop-off:</span>{" "}
-              {format(new Date(booking.dropoffAt), "dd MMM yyyy, HH:mm")}
-            </p>
-            <div className="mt-4 space-y-2 border-t border-gray-100 pt-4">
-              <div className="flex justify-between gap-4">
-                <span>Rental Price</span>
-                <span className="font-medium">{formatPrice(booking.baseAmountCents / 100)}</span>
-              </div>
-              {booking.optionLines
-                .filter((line) => line.category === "insurance")
-                .map((line) => (
-                  <div key={line.type} className="flex justify-between gap-4">
-                    <span>{line.label}</span>
-                    <span className="font-medium">+{formatPrice(line.lineTotalCents / 100)}</span>
-                  </div>
-                ))}
-              {booking.optionLines
-                .filter((line) => line.category === "extra")
-                .map((line) => (
-                  <div key={line.type} className="flex justify-between gap-4">
-                    <span>
-                      {line.label}
-                      {line.quantity > 1 ? ` ×${line.quantity}` : ""}
-                    </span>
-                    <span className="font-medium">+{formatPrice(line.lineTotalCents / 100)}</span>
-                  </div>
-                ))}
-              <div className="flex justify-between gap-4 border-t border-gray-100 pt-2">
-                <span>Tax</span>
-                <span className="font-medium">{formatPrice(booking.taxAmountCents / 100)}</span>
-              </div>
-              <div className="flex justify-between gap-4 text-base font-bold text-gray-900">
-                <span>Grand Total</span>
-                <span className="text-primary">{formatPrice(booking.totalAmountCents / 100)}</span>
-              </div>
+        <p className="mt-3 text-xs text-gray-500">Booking reference: {booking.id}</p>
+
+        <div className="mt-6 rounded-xl border border-green-100 bg-white p-5 text-left text-sm text-gray-700">
+          <p>
+            <span className="font-semibold text-gray-900">Pickup:</span>{" "}
+            {format(new Date(booking.pickupAt), "dd MMM yyyy, HH:mm")}
+          </p>
+          <p className="mt-2">
+            <span className="font-semibold text-gray-900">Drop-off:</span>{" "}
+            {format(new Date(booking.dropoffAt), "dd MMM yyyy, HH:mm")}
+          </p>
+          <div className="mt-4 space-y-2 border-t border-gray-100 pt-4">
+            <div className="flex justify-between gap-4">
+              <span>Rental Price</span>
+              <span className="font-medium">{formatPrice(booking.baseAmountCents / 100)}</span>
+            </div>
+            {booking.optionLines
+              .filter((line) => line.category === "insurance")
+              .map((line) => (
+                <div key={line.type} className="flex justify-between gap-4">
+                  <span>{line.label}</span>
+                  <span className="font-medium">+{formatPrice(line.lineTotalCents / 100)}</span>
+                </div>
+              ))}
+            {booking.optionLines
+              .filter((line) => line.category === "extra")
+              .map((line) => (
+                <div key={line.type} className="flex justify-between gap-4">
+                  <span>
+                    {line.label}
+                    {line.quantity > 1 ? ` ×${line.quantity}` : ""}
+                  </span>
+                  <span className="font-medium">+{formatPrice(line.lineTotalCents / 100)}</span>
+                </div>
+              ))}
+            <div className="flex justify-between gap-4 border-t border-gray-100 pt-2">
+              <span>Tax</span>
+              <span className="font-medium">{formatPrice(booking.taxAmountCents / 100)}</span>
+            </div>
+            <div className="flex justify-between gap-4 text-base font-bold text-gray-900">
+              <span>Grand Total</span>
+              <span className="text-primary">{formatPrice(booking.totalAmountCents / 100)}</span>
             </div>
           </div>
+        </div>
+
         <Link
           href="/car-rental"
           className="mt-8 inline-flex rounded-xl bg-primary px-6 py-3 font-semibold text-white hover:opacity-90"

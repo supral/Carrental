@@ -29,10 +29,23 @@ export function shouldBypassStripePayment(): boolean {
   return !isStripeConfigured();
 }
 
+/** Public site base URL for redirects, emails, and Stripe return URLs. */
 export function getAppBaseUrl(): string {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.AUTH_URL ||
-    "http://localhost:3000"
-  ).replace(/\/$/, "");
+  const candidates = [
+    process.env.NEXT_PUBLIC_APP_URL,
+    process.env.AUTH_URL,
+    process.env.VERCEL_PROJECT_PRODUCTION_URL,
+    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
+  ];
+
+  for (const value of candidates) {
+    if (!value?.trim()) continue;
+    const normalized = value.trim().replace(/\/$/, "");
+    if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+      return normalized;
+    }
+    return `https://${normalized}`;
+  }
+
+  return "http://localhost:3001";
 }
