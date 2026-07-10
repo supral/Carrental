@@ -1,66 +1,53 @@
 "use client";
 
-import { useMemo, useState, FormEvent } from "react";
+import { useEffect, useMemo, useState, FormEvent } from "react";
 import Link from "next/link";
-import { format } from "date-fns";
-import { createRentalBookingRequest } from "@/lib/rentals/rental-api";
+import { createRentalBookingRequest, fetchRentalVehicleAvailability } from "@/lib/rentals/rental-api";
 import { combineDateAndTime, normalizeTimeValue } from "@/lib/rentals/search-validation";
 import { calculateBookingPrice } from "@/lib/rentals/price-calculator";
 import {
-  getEnabledVehicleOptions,
-  RENTAL_OPTION_CATALOG_MAP,
-  type RentalOptionCategory,
-  type SelectedRentalOptionInput,
-  type VehicleRentalOptionConfig,
-} from "@/lib/rentals/option-catalog";
+  buildInitialRentalOptionSelections,
+  rentalSelectionsToPayload,
+} from "@/lib/rentals/rental-option-selection";
+import RentalOptionsSelector from "@/components/car-rental/booking/RentalOptionsSelector";
+import BookingSummary from "@/components/car-rental/booking/BookingSummary";
+import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
+import { getEnabledVehicleOptions, type VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { formatPrice } from "@/lib/utils";
 import type { RentalBookingContext } from "@/types/rental";
 import type { Vehicle } from "@/types";
-import InsuranceCard from "@/components/car-rental/booking/InsuranceCard";
-import ExtraCard from "@/components/car-rental/booking/ExtraCard";
-import BookingSummary from "@/components/car-rental/booking/BookingSummary";
-import FleetAvailabilityPanel from "@/components/car-rental/FleetAvailabilityPanel";
 import type { FleetAvailability } from "@/lib/rentals/fleet-inventory";
 
-type SelectionState = Record<string, { selected: boolean; quantity: number }>;
-
-function getOptionCategory(option: VehicleRentalOptionConfig): RentalOptionCategory {
-  if (option.category) return option.category;
-  const catalog = RENTAL_OPTION_CATALOG_MAP[option.type as keyof typeof RENTAL_OPTION_CATALOG_MAP];
-  return catalog?.category ?? "extra";
+function tripFromContext(context: RentalBookingContext): RentalBookingContext {
+  return {
+    ...context,
+    pickupTime: normalizeTimeValue(context.pickupTime),
+    dropoffTime: normalizeTimeValue(context.dropoffTime),
+  };
 }
 
-function getOptionLabel(option: VehicleRentalOptionConfig): string {
-  if (option.label) return option.label;
-  const catalog = RENTAL_OPTION_CATALOG_MAP[option.type as keyof typeof RENTAL_OPTION_CATALOG_MAP];
-  return catalog?.label ?? String(option.type);
-}
-
-function optionSupportsQuantity(option: VehicleRentalOptionConfig): boolean {
-  if (option.supportsQuantity != null) return option.supportsQuantity;
-  const catalog = RENTAL_OPTION_CATALOG_MAP[option.type as keyof typeof RENTAL_OPTION_CATALOG_MAP];
-  return catalog?.supportsQuantity ?? false;
-}
-
-function buildInitialSelections(options: VehicleRentalOptionConfig[]): SelectionState {
-  const state: SelectionState = {};
-  for (const option of options) {
-    state[String(option.type)] = {
-      selected: false,
-      quantity: 1,
-    };
+function validateTripDates(trip: RentalBookingContext): string | null {
+  if (!trip.pickupDate || !trip.pickupTime || !trip.dropoffDate || !trip.dropoffTime) {
+    return "Please complete pickup and drop-off dates and times.";
   }
-  return state;
-}
 
-function selectionsToPayload(selections: SelectionState): SelectedRentalOptionInput[] {
-  return Object.entries(selections)
-    .filter(([, value]) => value.selected)
-    .map(([type, value]) => ({
-      type,
-      quantity: value.quantity,
-    }));
+  const pickupAt = combineDateAndTime(trip.pickupDate, trip.pickupTime);
+  const dropoffAt = combineDateAndTime(trip.dropoffDate, trip.dropoffTime);
+
+  if (Number.isNaN(pickupAt.getTime()) || Number.isNaN(dropoffAt.getTime())) {
+    return "Invalid pickup or drop-off date/time.";
+  }
+
+  if (dropoffAt <= pickupAt) {
+    return "Drop-off must be after pickup.";
+  }
+
+  if (pickupAt < new Date()) {
+    return "Pickup cannot be in the past.";
+  }
+
+  return null;
 }
 
 interface RentalBookingFlowProps {
@@ -77,40 +64,85 @@ export default function RentalBookingFlow({
   fleetAvailability,
 }: RentalBookingFlowProps) {
   const vehicleTitle = formatVehicleName(vehicle);
-  const enabledOptions = useMemo(() => getEnabledVehicleOptions(vehicleOptions), [vehicleOptions]);
-  const insuranceOptions = enabledOptions.filter(
-    (option) => getOptionCategory(option) === "insurance"
-  );
-  const extraOptions = enabledOptions.filter(
-    (option) => getOptionCategory(option) !== "insurance"
-  );
+  const today = new Date().toISOString().split("T")[0];
 
-  const [selections, setSelections] = useState<SelectionState>(() => buildInitialSelections(enabledOptions));
+  const enabledOptions = useMemo(() => getEnabledVehicleOptions(vehicleOptions), [vehicleOptions]);
+
+  const [trip, setTrip] = useState<RentalBookingContext>(() => tripFromContext(bookingContext));
+  const [availability, setAvailability] = useState<FleetAvailability>(fleetAvailability);
+  const [tripError, setTripError] = useState<string | null>(null);
+  const [checkingAvailability, setCheckingAvailability] = useState(false);
+  const [selections, setSelections] = useState(() => buildInitialRentalOptionSelections(enabledOptions));
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const pickupAt = combineDateAndTime(bookingContext.pickupDate, bookingContext.pickupTime);
-  const dropoffAt = combineDateAndTime(bookingContext.dropoffDate, bookingContext.dropoffTime);
+  const pickupAt = combineDateAndTime(trip.pickupDate, trip.pickupTime);
+  const dropoffAt = combineDateAndTime(trip.dropoffDate, trip.dropoffTime);
 
   const breakdown = useMemo(() => {
+    const tripValidation = validateTripDates(trip);
+    if (tripValidation) return null;
+
     return calculateBookingPrice({
       pricePerDayAud: vehicle.price,
       pickupAt,
       dropoffAt,
       vehicleOptions,
-      selectedOptions: selectionsToPayload(selections),
+      selectedOptions: rentalSelectionsToPayload(selections),
     });
-  }, [vehicle.price, pickupAt, dropoffAt, vehicleOptions, selections]);
+  }, [vehicle.price, pickupAt, dropoffAt, vehicleOptions, selections, trip]);
 
-  const updateSelection = (type: string, patch: Partial<SelectionState[string]>) => {
-    setSelections((prev) => ({
-      ...prev,
-      [type]: { ...prev[type], ...patch },
-    }));
+  useEffect(() => {
+    const validationError = validateTripDates(trip);
+    if (validationError) {
+      setTripError(validationError);
+      setCheckingAvailability(false);
+      return;
+    }
+
+    setTripError(null);
+    setCheckingAvailability(true);
+
+    const timer = window.setTimeout(() => {
+      void fetchRentalVehicleAvailability(
+        vehicle.id,
+        pickupAt.toISOString(),
+        dropoffAt.toISOString()
+      )
+        .then((next) => {
+          setAvailability(next);
+          if (next.availableUnits <= 0) {
+            setTripError("This vehicle is not available for the selected dates. Please choose different dates.");
+          }
+        })
+        .catch((err) => {
+          setTripError(err instanceof Error ? err.message : "Could not check availability");
+        })
+        .finally(() => {
+          setCheckingAvailability(false);
+        });
+    }, 400);
+
+    return () => window.clearTimeout(timer);
+  }, [vehicle.id, trip.pickupDate, trip.pickupTime, trip.dropoffDate, trip.dropoffTime]);
+
+  const updateTripField = (field: keyof RentalBookingContext, value: string) => {
+    setTrip((prev) => ({ ...prev, [field]: value }));
+    setError(null);
   };
+
+  const isUnavailable = availability.availableUnits <= 0;
+  const canSubmit = !loading && !checkingAvailability && !tripError && !isUnavailable && breakdown != null;
 
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+
+    const validationError = validateTripDates(trip);
+    if (validationError || isUnavailable) {
+      setTripError(validationError ?? "This vehicle is not available for the selected dates.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -123,8 +155,8 @@ export default function RentalBookingFlow({
     try {
       const response = await createRentalBookingRequest({
         vehicleId: vehicle.id,
-        pickupAddress: bookingContext.pickupAddress,
-        dropoffAddress: bookingContext.dropoffAddress,
+        pickupAddress: trip.pickupAddress,
+        dropoffAddress: trip.dropoffAddress,
         pickupDateTime: pickupAt.toISOString(),
         dropoffDateTime: dropoffAt.toISOString(),
         customerName: data.name,
@@ -135,7 +167,7 @@ export default function RentalBookingFlow({
         customerDob: data.dob,
         customerCountry: data.country,
         notes: data.message,
-        selectedOptions: selectionsToPayload(selections),
+        selectedOptions: rentalSelectionsToPayload(selections),
       });
 
       const redirectUrl = response.data.checkoutUrl ?? response.data.successUrl;
@@ -151,95 +183,75 @@ export default function RentalBookingFlow({
   };
 
   return (
-    <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_380px]">
-      <div className="space-y-8">
-        <div>
-          <Link href={`/car-rental/${vehicle.id}`} className="text-sm font-medium text-primary hover:text-primary/80">
-            ← Back to vehicle details
-          </Link>
-          <h1 className="mt-3 text-3xl font-bold text-gray-900">Complete Your Rental</h1>
-          <p className="mt-2 text-gray-600">
-            Choose protection and extras for <strong>{vehicleTitle}</strong>, then complete your booking.
-          </p>
-        </div>
+    <div>
+      <div className="mb-8">
+        <Link href={`/car-rental/${vehicle.id}`} className="text-sm font-medium text-primary hover:text-primary/80">
+          ← Back to vehicle details
+        </Link>
+        <h1 className="mt-3 text-3xl font-bold text-gray-900">Complete Your Rental</h1>
+        <p className="mt-2 text-gray-600">
+          Choose protection and extras for <strong>{vehicleTitle}</strong>, then complete your booking.
+        </p>
+      </div>
 
+      <div className="grid grid-cols-1 gap-8 xl:grid-cols-[minmax(0,1fr)_400px] xl:items-start">
+        <div className="space-y-8">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary">Your trip</p>
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 text-sm text-gray-700">
+          <div className="mt-4 space-y-5">
             <div>
-              <p className="font-medium text-gray-900">Pickup</p>
-              <p>{bookingContext.pickupAddress}</p>
-              <p className="text-gray-500">
-                {format(pickupAt, "dd MMM yyyy, HH:mm")}
-              </p>
+              <p className="mb-1 text-sm font-medium text-gray-900">Pickup</p>
+              <p className="mb-3 text-sm text-gray-600">{trip.pickupAddress}</p>
+              <RentalDateTimePicker
+                inline
+                label="Pickup date & time"
+                dateValue={trip.pickupDate}
+                timeValue={trip.pickupTime}
+                minDate={today}
+                onDateChange={(value) => updateTripField("pickupDate", value)}
+                onTimeChange={(value) => updateTripField("pickupTime", value)}
+              />
             </div>
             <div>
-              <p className="font-medium text-gray-900">Drop-off</p>
-              <p>{bookingContext.dropoffAddress}</p>
-              <p className="text-gray-500">
-                {format(dropoffAt, "dd MMM yyyy, HH:mm")}
-              </p>
+              <p className="mb-1 text-sm font-medium text-gray-900">Drop-off</p>
+              <p className="mb-3 text-sm text-gray-600">{trip.dropoffAddress}</p>
+              <RentalDateTimePicker
+                inline
+                label="Drop-off date & time"
+                dateValue={trip.dropoffDate}
+                timeValue={trip.dropoffTime}
+                minDate={trip.pickupDate || today}
+                minTime={
+                  trip.dropoffDate && trip.dropoffDate === trip.pickupDate ? trip.pickupTime : undefined
+                }
+                onDateChange={(value) => updateTripField("dropoffDate", value)}
+                onTimeChange={(value) => updateTripField("dropoffTime", value)}
+              />
             </div>
           </div>
+
+          {checkingAvailability && (
+            <p className="mt-4 text-sm text-gray-500">Checking availability for your new dates...</p>
+          )}
+
+          {tripError && (
+            <div className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {tripError}
+            </div>
+          )}
+
+          {!tripError && !checkingAvailability && availability.availableUnits > 0 && (
+            <p className="mt-4 text-sm text-green-700">
+              {availability.availableUnits} unit{availability.availableUnits === 1 ? "" : "s"} available for these dates.
+            </p>
+          )}
         </div>
 
-        <FleetAvailabilityPanel
-          totalUnits={fleetAvailability.totalUnits}
-          reservedUnits={fleetAvailability.reservedUnits}
-          availableUnits={fleetAvailability.availableUnits}
+        <RentalOptionsSelector
+          vehicleOptions={vehicleOptions}
+          selections={selections}
+          onSelectionsChange={setSelections}
         />
-
-        {(insuranceOptions.length > 0 || extraOptions.length > 0) && (
-          <section className="space-y-6">
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">Rental Options</h2>
-              <p className="mt-1 text-sm text-gray-600">Customise your rental with protection and extras.</p>
-            </div>
-
-            {insuranceOptions.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">Protection Options</h3>
-                <div className="space-y-3">
-                  {insuranceOptions.map((option) => (
-                    <InsuranceCard
-                      key={String(option.type)}
-                      option={option}
-                      label={getOptionLabel(option)}
-                      selected={selections[String(option.type)]?.selected ?? false}
-                      onToggle={(selected) => updateSelection(String(option.type), { selected })}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {extraOptions.length > 0 && (
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold text-gray-900">Extras</h3>
-                <div className="grid gap-4 md:grid-cols-2">
-                  {extraOptions.map((option) => {
-                    const catalog = RENTAL_OPTION_CATALOG_MAP[option.type as keyof typeof RENTAL_OPTION_CATALOG_MAP];
-                    const maxQuantity = option.maxQuantity ?? option.defaultMaxQuantity ?? catalog?.defaultMaxQuantity ?? 1;
-                    const optionKey = String(option.type);
-                    return (
-                      <ExtraCard
-                        key={optionKey}
-                        option={option}
-                        label={getOptionLabel(option)}
-                        supportsQuantity={optionSupportsQuantity(option)}
-                        selected={selections[optionKey]?.selected ?? false}
-                        quantity={selections[optionKey]?.quantity ?? 1}
-                        maxQuantity={maxQuantity}
-                        onToggle={(selected) => updateSelection(optionKey, { selected })}
-                        onQuantityChange={(quantity) => updateSelection(optionKey, { quantity })}
-                      />
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-          </section>
-        )}
 
         <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
           <div>
@@ -299,7 +311,7 @@ export default function RentalBookingFlow({
                 name="dob"
                 type="date"
                 required
-                max={new Date().toISOString().split("T")[0]}
+                max={today}
                 className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
@@ -331,24 +343,29 @@ export default function RentalBookingFlow({
 
           <button
             type="submit"
-            disabled={loading || fleetAvailability.availableUnits <= 0}
+            disabled={!canSubmit}
             className="w-full rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-white transition-colors hover:opacity-90 disabled:opacity-60"
           >
-            {fleetAvailability.availableUnits <= 0
+            {isUnavailable
               ? "Unavailable for Selected Dates"
               : loading
                 ? "Processing..."
-                : `Confirm Booking · ${formatPrice(breakdown.totalAmountCents / 100)}`}
+                : checkingAvailability
+                  ? "Checking availability..."
+                  : breakdown
+                    ? `Confirm Booking · ${formatPrice(breakdown.totalAmountCents / 100)}`
+                    : "Confirm Booking"}
           </button>
         </form>
       </div>
 
       <BookingSummary
-        vehicleTitle={vehicleTitle}
-        pricePerDay={vehicle.price}
-        bookingContext={bookingContext}
+        vehicle={vehicle}
+        bookingContext={trip}
         breakdown={breakdown}
+        loading={checkingAvailability}
       />
+      </div>
     </div>
   );
 }

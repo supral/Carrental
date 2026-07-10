@@ -65,3 +65,23 @@ export async function createRentalBookingRequest(payload: {
 
   return json as RentalBookingResponse;
 }
+
+export async function fetchRentalVehicleAvailability(
+  vehicleId: string,
+  pickupDateTime: string,
+  dropoffDateTime: string
+): Promise<{
+  totalUnits: number;
+  reservedUnits: number;
+  availableUnits: number;
+}> {
+  const params = new URLSearchParams({ pickupDateTime, dropoffDateTime });
+  const res = await fetch(`/api/rentals/vehicles/${vehicleId}/availability?${params}`, {
+    cache: "no-store",
+  });
+  const json = await res.json();
+  if (!res.ok) {
+    throw new Error(json.error || "Could not check availability");
+  }
+  return json.data;
+}

@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import RentalBookingForm from "@/components/car-rental/RentalBookingForm";
 import type { RentalBookingContext } from "@/types/rental";
 import type { Vehicle } from "@/types";
+import type { VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
 
 function parseBookingContext(params: Record<string, string | string[] | undefined>): RentalBookingContext | null {
   const get = (key: string) => {
@@ -35,9 +36,11 @@ function parseBookingContext(params: Record<string, string | string[] | undefine
 export default function RentalDetailBooking({
   vehicle,
   searchParams,
+  vehicleOptions = [],
 }: {
   vehicle: Vehicle;
   searchParams: Record<string, string | string[] | undefined>;
+  vehicleOptions?: VehicleRentalOptionConfig[];
 }) {
   const bookingContext = parseBookingContext(searchParams);
   const shouldScrollToBook = searchParams.rent === "1";
@@ -51,5 +54,5 @@ export default function RentalDetailBooking({
     }
   }, [shouldScrollToBook]);
 
-  return <RentalBookingForm vehicle={vehicle} bookingContext={bookingContext ?? undefined} />;
+  return <RentalBookingForm vehicle={vehicle} bookingContext={bookingContext ?? undefined} vehicleOptions={vehicleOptions} />;
 }

@@ -14,6 +14,8 @@ import { buildRentalDetailUrl } from "@/lib/rentals/filter-utils";
 import { formatRentalAvailabilityWindow } from "@/lib/rentals/availability-window";
 import { combineDateAndTime } from "@/lib/rentals/search-validation";
 import { getFleetAvailability } from "@/lib/rentals/fleet-inventory";
+import { getDynamicVehicleRentalOptions } from "@/lib/rentals/dynamic-rental-options";
+import RentalOptionsPreview from "@/components/car-rental/RentalOptionsPreview";
 
 export const dynamic = "force-dynamic";
 
@@ -38,15 +40,6 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
 export default async function RentalVehicleDetailPage({ params, searchParams }: PageProps) {
   const { id } = await params;
   const query = await searchParams;
-  const vehicle = await getPublicRentalVehicleById(id);
-
-  if (!vehicle) {
-    notFound();
-  }
-
-  const vehicleTitle = formatVehicleName(vehicle);
-  const rentalWindow = formatRentalAvailabilityWindow(vehicle.rentalAvailableFrom);
-  const detailSections = vehicle.details?.sections ?? [];
 
   const bookingContext =
     typeof query.pickupAddress === "string" &&
@@ -65,16 +58,32 @@ export default async function RentalVehicleDetailPage({ params, searchParams }: 
         }
       : null;
 
+  const pickupAt = bookingContext
+    ? combineDateAndTime(bookingContext.pickupDate, bookingContext.pickupTime)
+    : null;
+  const dropoffAt = bookingContext
+    ? combineDateAndTime(bookingContext.dropoffDate, bookingContext.dropoffTime)
+    : null;
+
+  const [vehicle, fleetAvailability, vehicleOptions] = await Promise.all([
+    getPublicRentalVehicleById(id),
+    pickupAt && dropoffAt
+      ? getFleetAvailability(id, { pickupAt, dropoffAt })
+      : Promise.resolve(null),
+    getDynamicVehicleRentalOptions(id),
+  ]);
+
+  if (!vehicle) {
+    notFound();
+  }
+
+  const vehicleTitle = formatVehicleName(vehicle);
+  const rentalWindow = formatRentalAvailabilityWindow(vehicle.rentalAvailableFrom);
+  const detailSections = vehicle.details?.sections ?? [];
+
   const bookUrl = bookingContext
     ? buildRentalDetailUrl(id, bookingContext, "rent")
     : "#book";
-
-  const fleetAvailability = bookingContext
-    ? await getFleetAvailability(id, {
-        pickupAt: combineDateAndTime(bookingContext.pickupDate, bookingContext.pickupTime),
-        dropoffAt: combineDateAndTime(bookingContext.dropoffDate, bookingContext.dropoffTime),
-      })
-    : null;
 
   const canBook = !fleetAvailability || fleetAvailability.availableUnits > 0;
 
@@ -143,6 +152,12 @@ export default async function RentalVehicleDetailPage({ params, searchParams }: 
         </div>
       </section>
 
+      <section className="border-t border-gray-200 bg-white py-12 lg:py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <RentalOptionsPreview options={vehicleOptions} />
+        </div>
+      </section>
+
       <section className="py-12 lg:py-16">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
           <VehicleDetailsPanel
@@ -177,7 +192,7 @@ export default async function RentalVehicleDetailPage({ params, searchParams }: 
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="mx-auto max-w-2xl">
               <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
-                <RentalDetailBooking vehicle={vehicle} searchParams={query} />
+                <RentalDetailBooking vehicle={vehicle} searchParams={query} vehicleOptions={vehicleOptions} />
               </div>
             </div>
           </div>

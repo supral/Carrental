@@ -2,9 +2,16 @@
 
 import { useState, FormEvent, useEffect, useMemo } from "react";
 import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
+import RentalAddressInput from "@/components/car-rental/search/RentalAddressInput";
+import RentalOptionsSelector from "@/components/car-rental/booking/RentalOptionsSelector";
 import { createRentalBookingRequest } from "@/lib/rentals/rental-api";
 import { combineDateAndTime, normalizeTimeValue } from "@/lib/rentals/search-validation";
-import { calculateRentalDays } from "@/lib/rentals/pricing";
+import { calculateBookingPrice } from "@/lib/rentals/price-calculator";
+import {
+  buildInitialRentalOptionSelections,
+  rentalSelectionsToPayload,
+} from "@/lib/rentals/rental-option-selection";
+import { getEnabledVehicleOptions, type VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
 import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
 import { Vehicle } from "@/types";
 import type { RentalBookingContext } from "@/types/rental";
@@ -14,6 +21,7 @@ import { formatVehicleName } from "@/lib/vehicles/display";
 interface RentalBookingFormProps {
   vehicle: Vehicle;
   bookingContext?: RentalBookingContext;
+  vehicleOptions?: VehicleRentalOptionConfig[];
   className?: string;
 }
 
@@ -39,13 +47,24 @@ function hasCompleteTrip(tripDetails: ReturnType<typeof tripDetailsFromContext>)
   );
 }
 
-export default function RentalBookingForm({ vehicle, bookingContext, className = "" }: RentalBookingFormProps) {
+export default function RentalBookingForm({
+  vehicle,
+  bookingContext,
+  vehicleOptions = [],
+  className = "",
+}: RentalBookingFormProps) {
   const vehicleTitle = formatVehicleName(vehicle);
+  const enabledOptions = useMemo(() => getEnabledVehicleOptions(vehicleOptions), [vehicleOptions]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tripDetails, setTripDetails] = useState(() => tripDetailsFromContext(bookingContext));
+  const [selections, setSelections] = useState(() => buildInitialRentalOptionSelections(enabledOptions));
   const tripReady = hasCompleteTrip(tripDetails);
   const fromSearch = Boolean(bookingContext);
+
+  useEffect(() => {
+    setSelections(buildInitialRentalOptionSelections(enabledOptions));
+  }, [enabledOptions]);
 
   useEffect(() => {
     if (bookingContext) {
@@ -65,9 +84,21 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
     const pickupAt = combineDateAndTime(tripDetails.pickupDate, tripDetails.pickupTime);
     const dropoffAt = combineDateAndTime(tripDetails.dropoffDate, tripDetails.dropoffTime);
     if (Number.isNaN(pickupAt.getTime()) || Number.isNaN(dropoffAt.getTime())) return null;
-    const days = calculateRentalDays(pickupAt, dropoffAt);
-    return { days, total: vehicle.price * days };
-  }, [tripReady, tripDetails, vehicle.price]);
+    if (dropoffAt <= pickupAt) return null;
+
+    const breakdown = calculateBookingPrice({
+      pricePerDayAud: vehicle.price,
+      pickupAt,
+      dropoffAt,
+      vehicleOptions,
+      selectedOptions: rentalSelectionsToPayload(selections),
+    });
+
+    return {
+      days: breakdown.rentalDays,
+      total: breakdown.totalAmountCents / 100,
+    };
+  }, [tripReady, tripDetails, vehicle.price, vehicleOptions, selections]);
 
   const updateTripField = (field: keyof typeof tripDetails, value: string) => {
     setTripDetails((prev) => ({ ...prev, [field]: value }));
@@ -113,6 +144,7 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
         customerDob: data.dob,
         customerCountry: data.country,
         notes: data.message,
+        selectedOptions: rentalSelectionsToPayload(selections),
       });
 
       const redirectUrl = response.data.checkoutUrl ?? response.data.successUrl;
@@ -162,34 +194,18 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
             {fromSearch ? "Your trip (from search)" : "Rental dates & locations"}
           </h4>
           <div className="space-y-4">
-            <div>
-              <label htmlFor="pickupAddress" className="mb-1 block text-sm font-medium text-gray-700">
-                Pickup Address <span className="text-primary">*</span>
-              </label>
-              <input
-                id="pickupAddress"
-                name="pickupAddress"
-                type="text"
-                required
-                value={tripDetails.pickupAddress}
-                onChange={(e) => updateTripField("pickupAddress", e.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-            <div>
-              <label htmlFor="dropoffAddress" className="mb-1 block text-sm font-medium text-gray-700">
-                Drop-off Address <span className="text-primary">*</span>
-              </label>
-              <input
-                id="dropoffAddress"
-                name="dropoffAddress"
-                type="text"
-                required
-                value={tripDetails.dropoffAddress}
-                onChange={(e) => updateTripField("dropoffAddress", e.target.value)}
-                className="w-full rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
+            <RentalAddressInput
+              label="Pickup Address"
+              value={tripDetails.pickupAddress}
+              onChange={(value) => updateTripField("pickupAddress", value)}
+              required
+            />
+            <RentalAddressInput
+              label="Drop-off Address"
+              value={tripDetails.dropoffAddress}
+              onChange={(value) => updateTripField("dropoffAddress", value)}
+              required
+            />
             <RentalDateTimePicker
               label="Pickup date & time *"
               dateValue={tripDetails.pickupDate}
@@ -213,6 +229,12 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
             />
           </div>
         </section>
+
+        <RentalOptionsSelector
+          vehicleOptions={vehicleOptions}
+          selections={selections}
+          onSelectionsChange={setSelections}
+        />
 
         <div>
           <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">
@@ -339,7 +361,7 @@ export default function RentalBookingForm({ vehicle, bookingContext, className =
           disabled={loading || !tripReady}
           className="w-full rounded-lg bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Processing..." : "Confirm Booking"}
+          {loading ? "Processing..." : rentalQuote ? `Confirm Booking · ${formatPrice(rentalQuote.total)}` : "Confirm Booking"}
         </button>
 
         <p className="text-center text-xs text-gray-500">

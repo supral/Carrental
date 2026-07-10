@@ -1,14 +1,25 @@
 "use client";
 
 import { MapPin } from "lucide-react";
-import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DEFAULT_RENTAL_ADDRESS,
+  RENTAL_LOCATION_OPTIONS,
+  getRentalLocationSelectValue,
+} from "@/lib/rentals/locations";
 import { cn } from "@/lib/utils";
 
 interface RentalAddressInputProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  onMapClick: () => void;
+  onMapClick?: () => void;
   error?: string;
   required?: boolean;
 }
@@ -21,6 +32,8 @@ export default function RentalAddressInput({
   error,
   required,
 }: RentalAddressInputProps) {
+  const selectedValue = getRentalLocationSelectValue(value);
+
   return (
     <div>
       <label className="mb-1.5 block text-sm font-medium text-gray-700">
@@ -35,20 +48,30 @@ export default function RentalAddressInput({
       >
         <button
           type="button"
-          onClick={onMapClick}
-          aria-label={`Open map for ${label}`}
-          className="flex h-[46px] w-12 shrink-0 items-center justify-center border-r border-gray-200 text-primary transition-colors hover:bg-gray-50 hover:text-primary"
+          onClick={() => {
+            onChange(DEFAULT_RENTAL_ADDRESS);
+            onMapClick?.();
+          }}
+          aria-label={`View map for ${label}`}
+          className="flex h-12 w-12 shrink-0 items-center justify-center border-r border-gray-200 text-primary transition-colors hover:bg-gray-50 hover:text-primary"
         >
           <MapPin className="h-4 w-4" />
         </button>
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={DEFAULT_RENTAL_ADDRESS}
-          required={required}
-          className="min-w-0 flex-1 border-0 bg-transparent py-3 pr-4 text-sm outline-none placeholder:text-gray-400"
-        />
+        <Select value={selectedValue} onValueChange={onChange}>
+          <SelectTrigger
+            aria-label={label}
+            className="h-12 flex-1 rounded-none border-0 bg-transparent px-3.5 shadow-none focus:ring-0"
+          >
+            <SelectValue placeholder="Select location" />
+          </SelectTrigger>
+          <SelectContent>
+            {RENTAL_LOCATION_OPTIONS.map((option) => (
+              <SelectItem key={option.id} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </div>
       {error && <p className="mt-1.5 text-xs text-primary">{error}</p>}
     </div>

@@ -5,7 +5,6 @@ import { Search } from "lucide-react";
 import RentalMapPicker from "@/components/car-rental/search/RentalMapPicker";
 import RentalAddressInput from "@/components/car-rental/search/RentalAddressInput";
 import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
-import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
 import type { RentalSearchFormValues } from "@/types/rental";
 
 interface RentalSearchCardProps {
@@ -50,10 +49,7 @@ export default function RentalSearchCard({
               label="Pickup Address"
               value={values.pickupAddress}
               onChange={(v) => onChange("pickupAddress", v)}
-              onMapClick={() => {
-                onChange("pickupAddress", DEFAULT_RENTAL_ADDRESS);
-                setMapOpenFor("pickup");
-              }}
+              onMapClick={() => setMapOpenFor("pickup")}
               error={errors.pickupAddress}
               required
             />
@@ -78,10 +74,7 @@ export default function RentalSearchCard({
               label="Drop-off Address"
               value={values.dropoffAddress}
               onChange={(v) => onChange("dropoffAddress", v)}
-              onMapClick={() => {
-                onChange("dropoffAddress", DEFAULT_RENTAL_ADDRESS);
-                setMapOpenFor("dropoff");
-              }}
+              onMapClick={() => setMapOpenFor("dropoff")}
               error={errors.dropoffAddress}
               required
             />

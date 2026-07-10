@@ -66,8 +66,28 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
   });
 
   const handleFieldChange = (field: keyof RentalSearchFormValues, value: string) => {
-    setFormValues((prev) => ({ ...prev, [field]: value }));
-    setFormErrors((prev) => ({ ...prev, [field]: undefined }));
+    setFormValues((prev) => {
+      if (field === "pickupDate" && value !== prev.pickupDate) {
+        return {
+          ...prev,
+          pickupDate: value,
+          dropoffDate: "",
+          dropoffTime: "",
+        };
+      }
+      return { ...prev, [field]: value };
+    });
+    setFormErrors((prev) => {
+      if (field === "pickupDate") {
+        return {
+          ...prev,
+          pickupDate: undefined,
+          dropoffDate: undefined,
+          dropoffTime: undefined,
+        };
+      }
+      return { ...prev, [field]: undefined };
+    });
   };
 
   const handleSearch = () => {
