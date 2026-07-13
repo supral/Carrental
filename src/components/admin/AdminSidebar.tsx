@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Car, FileText,
-  BarChart3, Settings, Bell, Image, Package, Layers,
+  BarChart3, Settings, Bell, Image, Package, Layers, CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -16,6 +16,7 @@ const navItems: { href: string; label: string; icon: React.ElementType; permissi
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard:view" },
   { href: "/admin/fleet", label: "Rental Fleet", icon: Car, permission: "vehicles:view" },
   { href: "/admin/vehicles", label: "Vehicle Types", icon: Layers, permission: "vehicles:view" },
+  { href: "/admin/calendar", label: "Booking Calendar", icon: CalendarDays, permission: "vehicles:view" },
   { href: "/admin/rental-options", label: "Rental Options", icon: Package, permission: "vehicles:view" },
   { href: "/admin/bookings", label: "Rental Bookings", icon: FileText, permission: "vehicles:view" },
   { href: "/admin/media", label: "Media", icon: Image, permission: "content:manage" },

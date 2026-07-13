@@ -219,6 +219,7 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
   });
 
   revalidatePath("/admin/bookings");
+  revalidatePath("/admin/calendar");
   revalidatePath("/admin/vehicles");
   revalidatePath(`/admin/vehicles/${input.vehicleId}/edit`);
   revalidatePath("/car-rental", "layout");
@@ -228,4 +229,106 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
     totalAmountCents: booking.totalAmountCents,
     status: booking.status,
   };
+}
+
+export async function getAdminBookingCalendar(year: number, month: number, vehicleId?: string | null) {
+  await requireBookingAdmin();
+  const { getBookingCalendarEvents } = await import("@/lib/rentals/booking-calendar");
+  return getBookingCalendarEvents({ year, month, vehicleId });
+}
+
+export type AdminUpdateRentalBookingInput = {
+  id: string;
+  vehicleId: string;
+  customerName: string;
+  pickupDate: string;
+  dropoffDate: string;
+  pickupTime?: string;
+  dropoffTime?: string;
+  notes?: string;
+};
+
+export async function updateAdminRentalBooking(input: AdminUpdateRentalBookingInput) {
+  await requireBookingAdmin(true);
+
+  const pickupAt = combineDateAndTime(
+    input.pickupDate,
+    normalizeTimeValue(input.pickupTime || "09:00")
+  );
+  const dropoffAt = combineDateAndTime(
+    input.dropoffDate,
+    normalizeTimeValue(input.dropoffTime || "09:00")
+  );
+
+  if (Number.isNaN(pickupAt.getTime()) || Number.isNaN(dropoffAt.getTime())) {
+    throw new Error("Invalid pickup or drop-off date/time");
+  }
+  if (dropoffAt <= pickupAt) {
+    throw new Error("Drop-off must be after pickup");
+  }
+
+  const existing = await prisma.rentalBooking.findUnique({
+    where: { id: input.id },
+    select: { id: true, vehicleId: true, status: true },
+  });
+  if (!existing) throw new Error("Booking not found");
+
+  const fleet = await getFleetAvailability(input.vehicleId, { pickupAt, dropoffAt }, {
+    excludeBookingId: input.id,
+  });
+  if (fleet.availableUnits <= 0) {
+    throw new Error("This vehicle is fully booked for the selected dates");
+  }
+
+  const updated = await prisma.rentalBooking.update({
+    where: { id: input.id },
+    data: {
+      vehicleId: input.vehicleId,
+      customerName: input.customerName.trim(),
+      pickupAt,
+      dropoffAt,
+      notes: input.notes?.trim() || null,
+    },
+  });
+
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin/calendar");
+  revalidatePath(`/admin/vehicles/${input.vehicleId}/edit`);
+  if (existing.vehicleId !== input.vehicleId) {
+    revalidatePath(`/admin/vehicles/${existing.vehicleId}/edit`);
+  }
+
+  return { id: updated.id };
+}
+
+export async function cancelAdminRentalBooking(bookingId: string) {
+  await requireBookingAdmin(true);
+
+  const existing = await prisma.rentalBooking.findUnique({
+    where: { id: bookingId },
+    select: { id: true, vehicleId: true, status: true },
+  });
+  if (!existing) throw new Error("Booking not found");
+  if (existing.status === "CANCELLED") return { ok: true };
+
+  const { handleRentalBookingStatusChange } = await import("@/lib/rentals/rental-inventory-units");
+  const { RentalBookingStatus } = await import("@prisma/client");
+
+  await prisma.$transaction(async (tx) => {
+    await tx.rentalBooking.update({
+      where: { id: bookingId },
+      data: { status: RentalBookingStatus.CANCELLED },
+    });
+    await handleRentalBookingStatusChange(
+      bookingId,
+      existing.status,
+      RentalBookingStatus.CANCELLED,
+      tx
+    );
+  });
+
+  revalidatePath("/admin/bookings");
+  revalidatePath("/admin/calendar");
+  revalidatePath(`/admin/vehicles/${existing.vehicleId}/edit`);
+  return { ok: true };
 }

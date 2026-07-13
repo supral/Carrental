@@ -29,7 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import RentalAvailabilityCalendar from "@/components/admin/RentalAvailabilityCalendar";
+import RentalBookingCalendar from "@/components/admin/RentalBookingCalendar";
 
 interface VehicleTypeOption {
   id: string;
@@ -198,7 +198,7 @@ export default function EditRentalVehicleClient({
           </div>
         </section>
 
-        <RentalAvailabilityCalendar vehicleId={vehicle.id} />
+        <RentalBookingCalendar lockedVehicleId={vehicle.id} />
 
         <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold">Vehicle Type & Specifications</h2>
