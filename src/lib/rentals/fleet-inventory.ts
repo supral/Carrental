@@ -13,6 +13,11 @@ export interface FleetAvailability {
   availableUnits: number;
 }
 
+export type ReservationInterval = {
+  pickupAt: Date;
+  dropoffAt: Date;
+};
+
 /** Statuses that block a fleet unit for overlapping dates. */
 export const BLOCKING_RENTAL_STATUSES: RentalBookingStatus[] = [
   RentalBookingStatus.PENDING,
@@ -57,6 +62,78 @@ export function blockingRentalBookingFilter(now = new Date()): Prisma.RentalBook
   };
 }
 
+/**
+ * Peak number of bookings that are simultaneously active.
+ * This is the source of truth for whether another unit can be booked.
+ */
+export function getPeakConcurrentReservations(bookings: ReservationInterval[]): number {
+  if (bookings.length === 0) return 0;
+
+  type Event = { time: number; delta: number };
+  const events: Event[] = [];
+
+  for (const booking of bookings) {
+    events.push({ time: booking.pickupAt.getTime(), delta: 1 });
+    events.push({ time: booking.dropoffAt.getTime(), delta: -1 });
+  }
+
+  // Process releases before starts at the same timestamp so back-to-back rentals don't stack.
+  events.sort((a, b) => a.time - b.time || a.delta - b.delta);
+
+  let current = 0;
+  let peak = 0;
+  for (const event of events) {
+    current += event.delta;
+    peak = Math.max(peak, current);
+  }
+
+  return peak;
+}
+
+/**
+ * Date-range availability from total fleet size vs peak concurrent overlapping bookings.
+ * Does not use Vehicle.availableUnits (that counter is inventory-hold state, not date-specific).
+ */
+export function computeDateRangeAvailability(
+  totalUnits: number | null | undefined,
+  peakReservedUnits: number
+): FleetAvailability {
+  const total = Math.max(1, totalUnits ?? 1);
+  const reservedUnits = Math.max(0, Math.min(total, peakReservedUnits));
+  return {
+    totalUnits: total,
+    reservedUnits,
+    availableUnits: Math.max(0, total - reservedUnits),
+  };
+}
+
+export function isFullyBooked(availability: FleetAvailability): boolean {
+  return availability.availableUnits <= 0;
+}
+
+async function listOverlappingBlockingBookings(
+  vehicleId: string,
+  range: DateRange,
+  options?: {
+    excludeBookingId?: string;
+    client?: Prisma.TransactionClient;
+    now?: Date;
+  }
+): Promise<ReservationInterval[]> {
+  const client = options?.client ?? prisma;
+
+  return client.rentalBooking.findMany({
+    where: {
+      vehicleId,
+      ...(options?.excludeBookingId ? { id: { not: options.excludeBookingId } } : {}),
+      ...rentalDateOverlapFilter(range.pickupAt, range.dropoffAt),
+      ...blockingRentalBookingFilter(options?.now),
+    },
+    select: { pickupAt: true, dropoffAt: true },
+  });
+}
+
+/** @deprecated Prefer getPeakReservedUnitsForRange — kept as alias for peak concurrent reserved units. */
 export async function countActiveReservations(
   vehicleId: string,
   range: DateRange,
@@ -66,32 +143,23 @@ export async function countActiveReservations(
     now?: Date;
   }
 ): Promise<number> {
-  const client = options?.client ?? prisma;
-
-  return client.rentalBooking.count({
-    where: {
-      vehicleId,
-      ...(options?.excludeBookingId ? { id: { not: options.excludeBookingId } } : {}),
-      ...rentalDateOverlapFilter(range.pickupAt, range.dropoffAt),
-      ...blockingRentalBookingFilter(options?.now),
-    },
-  });
+  return getPeakReservedUnitsForRange(vehicleId, range, options);
 }
 
-function computeFleetAvailability(
-  vehicle: { totalUnits: number | null; availableUnits: number | null },
-  reservedForRange: number
-): FleetAvailability {
-  const totalUnits = Math.max(1, vehicle.totalUnits ?? 1);
-  const storedAvailable = Math.max(0, vehicle.availableUnits ?? totalUnits);
-  const rangeAvailable = Math.max(0, totalUnits - reservedForRange);
-  const availableUnits = Math.min(storedAvailable, rangeAvailable);
-  const reservedUnits = totalUnits - availableUnits;
-
-  return { totalUnits, reservedUnits, availableUnits };
+export async function getPeakReservedUnitsForRange(
+  vehicleId: string,
+  range: DateRange,
+  options?: {
+    excludeBookingId?: string;
+    client?: Prisma.TransactionClient;
+    now?: Date;
+  }
+): Promise<number> {
+  const bookings = await listOverlappingBlockingBookings(vehicleId, range, options);
+  return getPeakConcurrentReservations(bookings);
 }
 
-/** Batch fleet availability for search — 2 queries instead of 2 per vehicle. */
+/** Batch fleet availability for search — peak concurrent per vehicle over the range. */
 export async function getFleetAvailabilityBatch(
   vehicleIds: string[],
   range: DateRange,
@@ -102,30 +170,45 @@ export async function getFleetAvailabilityBatch(
     return result;
   }
 
-  const vehicles = await prisma.vehicle.findMany({
-    where: { id: { in: vehicleIds } },
-    select: { id: true, totalUnits: true, availableUnits: true },
-  });
+  const [vehicles, bookings, fleetCounts] = await Promise.all([
+    prisma.vehicle.findMany({
+      where: { id: { in: vehicleIds } },
+      select: { id: true, totalUnits: true },
+    }),
+    prisma.rentalBooking.findMany({
+      where: {
+        vehicleId: { in: vehicleIds },
+        ...rentalDateOverlapFilter(range.pickupAt, range.dropoffAt),
+        ...blockingRentalBookingFilter(now),
+      },
+      select: { vehicleId: true, pickupAt: true, dropoffAt: true },
+    }),
+    prisma.fleetVehicle.groupBy({
+      by: ["vehicleId"],
+      where: {
+        vehicleId: { in: vehicleIds },
+        status: { in: ["AVAILABLE", "RENTED", "RESERVED"] },
+      },
+      _count: { _all: true },
+    }),
+  ]);
 
-  const reservationCounts = await prisma.rentalBooking.groupBy({
-    by: ["vehicleId"],
-    where: {
-      vehicleId: { in: vehicleIds },
-      ...rentalDateOverlapFilter(range.pickupAt, range.dropoffAt),
-      ...blockingRentalBookingFilter(now),
-    },
-    _count: { _all: true },
-  });
+  const bookingsByVehicle = new Map<string, ReservationInterval[]>();
+  for (const booking of bookings) {
+    const list = bookingsByVehicle.get(booking.vehicleId) ?? [];
+    list.push({ pickupAt: booking.pickupAt, dropoffAt: booking.dropoffAt });
+    bookingsByVehicle.set(booking.vehicleId, list);
+  }
 
-  const reservedByVehicleId = new Map(
-    reservationCounts.map((row) => [row.vehicleId, row._count._all])
+  const fleetCountByVehicle = new Map(
+    fleetCounts.map((row) => [row.vehicleId, row._count._all] as const)
   );
 
   for (const vehicle of vehicles) {
-    result.set(
-      vehicle.id,
-      computeFleetAvailability(vehicle, reservedByVehicleId.get(vehicle.id) ?? 0)
-    );
+    const peak = getPeakConcurrentReservations(bookingsByVehicle.get(vehicle.id) ?? []);
+    const fleetTotal = fleetCountByVehicle.get(vehicle.id) ?? 0;
+    const total = fleetTotal > 0 ? fleetTotal : Math.max(1, vehicle.totalUnits ?? 1);
+    result.set(vehicle.id, computeDateRangeAvailability(total, peak));
   }
 
   return result;
@@ -142,17 +225,22 @@ export async function getFleetAvailability(
 ): Promise<FleetAvailability> {
   const client = options?.client ?? prisma;
 
-  const vehicle = await client.vehicle.findUnique({
-    where: { id: vehicleId },
-    select: { totalUnits: true, availableUnits: true },
-  });
+  const [vehicle, peakReserved, fleetCount] = await Promise.all([
+    client.vehicle.findUnique({
+      where: { id: vehicleId },
+      select: { totalUnits: true },
+    }),
+    getPeakReservedUnitsForRange(vehicleId, range, options),
+    client.fleetVehicle.count({
+      where: {
+        vehicleId,
+        status: { in: ["AVAILABLE", "RENTED", "RESERVED"] },
+      },
+    }),
+  ]);
 
-  const reservedForRange = await countActiveReservations(vehicleId, range, options);
-
-  return computeFleetAvailability(
-    vehicle ?? { totalUnits: 1, availableUnits: 1 },
-    reservedForRange
-  );
+  const totalFromFleet = fleetCount > 0 ? fleetCount : Math.max(1, vehicle?.totalUnits ?? 1);
+  return computeDateRangeAvailability(totalFromFleet, peakReserved);
 }
 
 export async function assertFleetUnitsAvailable(
@@ -166,7 +254,7 @@ export async function assertFleetUnitsAvailable(
 ): Promise<FleetAvailability> {
   const availability = await getFleetAvailability(vehicleId, range, options);
 
-  if (availability.availableUnits <= 0) {
+  if (isFullyBooked(availability)) {
     throw new RentalUnavailableError(NO_VEHICLES_AVAILABLE_MESSAGE);
   }
 
@@ -183,27 +271,7 @@ export async function getPeakReservedUnits(vehicleId: string, now = new Date()):
     select: { pickupAt: true, dropoffAt: true },
   });
 
-  if (bookings.length === 0) return 0;
-
-  type Event = { time: number; delta: number };
-  const events: Event[] = [];
-
-  for (const booking of bookings) {
-    events.push({ time: booking.pickupAt.getTime(), delta: 1 });
-    events.push({ time: booking.dropoffAt.getTime(), delta: -1 });
-  }
-
-  events.sort((a, b) => a.time - b.time || a.delta - b.delta);
-
-  let current = 0;
-  let peak = 0;
-
-  for (const event of events) {
-    current += event.delta;
-    peak = Math.max(peak, current);
-  }
-
-  return peak;
+  return getPeakConcurrentReservations(bookings);
 }
 
 /** Minimum totalUnits required so no active booking window exceeds fleet size. */
@@ -212,21 +280,20 @@ export async function getMinimumRequiredTotalUnits(vehicleId: string, now = new 
   return Math.max(1, peak);
 }
 
-/** Admin snapshot: current fleet size vs peak reserved units (not date-specific). */
+/** Admin snapshot: fleet size vs peak concurrent occupancy (date-aware). */
 export async function getFleetInventorySnapshot(
   vehicleId: string,
   now = new Date()
 ): Promise<FleetAvailability> {
-  const vehicle = await prisma.vehicle.findUnique({
-    where: { id: vehicleId },
-    select: { totalUnits: true, availableUnits: true },
-  });
+  const [vehicle, peakReserved] = await Promise.all([
+    prisma.vehicle.findUnique({
+      where: { id: vehicleId },
+      select: { totalUnits: true },
+    }),
+    getPeakReservedUnits(vehicleId, now),
+  ]);
 
-  const totalUnits = Math.max(1, vehicle?.totalUnits ?? 1);
-  const availableUnits = Math.max(0, vehicle?.availableUnits ?? totalUnits);
-  const reservedUnits = totalUnits - availableUnits;
-
-  return { totalUnits, reservedUnits, availableUnits };
+  return computeDateRangeAvailability(vehicle?.totalUnits, peakReserved);
 }
 
 /** Cancel unpaid pending bookings past the checkout hold window. */

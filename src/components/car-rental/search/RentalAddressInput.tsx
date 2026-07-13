@@ -19,7 +19,6 @@ interface RentalAddressInputProps {
   label: string;
   value: string;
   onChange: (value: string) => void;
-  onMapClick?: () => void;
   error?: string;
   required?: boolean;
 }
@@ -28,7 +27,6 @@ export default function RentalAddressInput({
   label,
   value,
   onChange,
-  onMapClick,
   error,
   required,
 }: RentalAddressInputProps) {
@@ -50,7 +48,7 @@ export default function RentalAddressInput({
           type="button"
           onClick={() => {
             onChange(DEFAULT_RENTAL_ADDRESS);
-            onMapClick?.();
+         
           }}
           aria-label={`View map for ${label}`}
           className="flex h-12 w-12 shrink-0 items-center justify-center border-r border-gray-200 text-primary transition-colors hover:bg-gray-50 hover:text-primary"

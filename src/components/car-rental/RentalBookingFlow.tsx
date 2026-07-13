@@ -241,9 +241,7 @@ export default function RentalBookingFlow({
           )}
 
           {!tripError && !checkingAvailability && availability.availableUnits > 0 && (
-            <p className="mt-4 text-sm text-green-700">
-              {availability.availableUnits} unit{availability.availableUnits === 1 ? "" : "s"} available for these dates.
-            </p>
+            <p className="mt-4 text-sm text-green-700">Available for these dates.</p>
           )}
         </div>
 

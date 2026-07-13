@@ -25,9 +25,8 @@ export const formConfigs: Record<FormType, { title: string; subtitle: string; fi
         required: true,
         options: [
           { value: "general", label: "General Enquiry" },
-          { value: "sell", label: "Sell My Car" },
-          { value: "finance", label: "Finance" },
-          { value: "other", label: "Other" },
+          
+      
         ],
       },
       { name: "message", label: "Message", type: "textarea", required: true, placeholder: "How can we help?" },

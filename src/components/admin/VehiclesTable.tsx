@@ -1,8 +1,11 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { ColumnDef } from "@tanstack/react-table";
 import DataTable from "@/components/admin/DataTable";
+import ConfirmDialog from "@/components/admin/ConfirmDialog";
+import { useAdminToast } from "@/components/admin/AdminToastProvider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -269,15 +272,40 @@ export default function VehiclesTable({
   canManage?: boolean;
   rentalOnly?: boolean;
 }) {
+  const router = useRouter();
+  const { toast } = useAdminToast();
+  const [isPending, startTransition] = useTransition();
   const [filter, setFilter] = useState<VehicleListFilter>("all");
   const [searchQuery, setSearchQuery] = useState("");
   const [bulkOfferOpen, setBulkOfferOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [offerDialog, setOfferDialog] = useState<{
     vehicleId: string;
     title: string;
     price: number;
     currentOfferName: string | null;
   } | null>(null);
+
+  const handleDelete = () => {
+    if (!deleteTarget) return;
+
+    startTransition(async () => {
+      try {
+        await deleteVehicle(deleteTarget.id);
+        toast({
+          type: "success",
+          message: "The vehicle has been removed successfully.",
+        });
+        setDeleteTarget(null);
+        router.refresh();
+      } catch {
+        toast({
+          type: "error",
+          message: "Something went wrong while deleting the vehicle.",
+        });
+      }
+    });
+  };
 
   const counts = useMemo(
     () =>
@@ -528,8 +556,13 @@ export default function VehiclesTable({
             <Button
               size="sm"
               variant="ghost"
-              onClick={() => deleteVehicle(row.original.id)}
-              title="Delete"
+              onClick={() =>
+                setDeleteTarget({
+                  id: row.original.id,
+                  title: row.original.title,
+                })
+              }
+              title="Delete Vehicle"
             >
               <Trash2 className="h-4 w-4 text-red-600" />
             </Button>
@@ -739,6 +772,28 @@ export default function VehiclesTable({
         vehicleIds={bulkSaleVehicleIds}
         vehicleCount={bulkSaleVehicleIds.length}
         scopeLabel={FILTER_LABELS[filter]}
+      />
+      <ConfirmDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        title="Delete Vehicle"
+        description={
+          deleteTarget ? (
+            <div className="space-y-3">
+              <p>Are you sure you want to delete this vehicle?</p>
+              <div>
+                <p className="font-medium text-foreground">Vehicle:</p>
+                <p className="mt-1 font-semibold text-foreground">{deleteTarget.title}</p>
+              </div>
+              <p>This action cannot be undone.</p>
+            </div>
+          ) : undefined
+        }
+        confirmLabel="Delete Vehicle"
+        cancelLabel="Cancel"
+        destructive
+        isPending={isPending}
+        onConfirm={handleDelete}
       />
     </>
   );

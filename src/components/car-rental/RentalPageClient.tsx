@@ -200,8 +200,6 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
                         <p className="mt-1 text-sm text-gray-600">
                           {format(new Date(searchRequest.pickupDateTime), "dd MMM yyyy, HH:mm")} →{" "}
                           {format(new Date(searchRequest.dropoffDateTime), "dd MMM yyyy, HH:mm")}
-                          {" · "}
-                          {paginated.total} car{paginated.total !== 1 ? "s" : ""} available
                         </p>
                       )}
                     </div>

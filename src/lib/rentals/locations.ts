@@ -6,16 +6,7 @@ export const DEFAULT_RENTAL_ADDRESS = "Darwin, NT";
 
 export const RENTAL_LOCATIONS = [
   dealershipLocation,
-  {
-    id: "darwin-airport",
-    label: "Darwin Airport",
-    address: "1 Henry Wrigley Dr, Eaton NT 0820",
-  },
-  {
-    id: "darwin-cbd",
-    label: "Darwin CBD",
-    address: "Smith Street, Darwin City NT 0800",
-  },
+  
 ] as const;
 
 export type RentalLocationOption = {
@@ -31,16 +22,7 @@ export const RENTAL_LOCATION_OPTIONS: RentalLocationOption[] = [
     label: DEFAULT_RENTAL_ADDRESS,
     value: DEFAULT_RENTAL_ADDRESS,
   },
-  {
-    id: "darwin-airport",
-    label: "Darwin Airport",
-    value: "1 Henry Wrigley Dr, Eaton NT 0820",
-  },
-  {
-    id: "darwin-cbd",
-    label: "Darwin CBD",
-    value: "Smith Street, Darwin City NT 0800",
-  },
+  
 ];
 
 export function resolveRentalLocationValue(address: string): string {

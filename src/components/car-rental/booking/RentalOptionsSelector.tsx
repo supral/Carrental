@@ -46,6 +46,19 @@ export default function RentalOptionsSelector({
     });
   };
 
+  const selectProtectionOption = (selectedType: string) => {
+    const next: RentalOptionSelections = { ...selections };
+    for (const option of insuranceOptions) {
+      const key = String(option.type);
+      next[key] = {
+        ...next[key],
+        selected: key === selectedType,
+        quantity: next[key]?.quantity ?? 1,
+      };
+    }
+    onSelectionsChange(next);
+  };
+
   return (
     <section className={`space-y-6 ${className}`}>
       <div>
@@ -56,7 +69,7 @@ export default function RentalOptionsSelector({
       {insuranceOptions.length > 0 && (
         <div className="space-y-4">
           <h3 className="text-lg font-semibold text-gray-900">Protection</h3>
-          <div className="space-y-3">
+          <div className="space-y-3" role="radiogroup" aria-label="Protection options">
             {insuranceOptions.map((option) => {
               const optionKey = String(option.type);
               return (
@@ -64,8 +77,9 @@ export default function RentalOptionsSelector({
                   key={optionKey}
                   option={option}
                   label={getOptionLabel(option)}
+                  name="rental-protection"
                   selected={selections[optionKey]?.selected ?? false}
-                  onToggle={(selected) => updateSelection(optionKey, { selected })}
+                  onSelect={() => selectProtectionOption(optionKey)}
                 />
               );
             })}

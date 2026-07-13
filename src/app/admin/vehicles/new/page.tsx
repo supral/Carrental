@@ -28,20 +28,20 @@ export default async function NewVehiclePage() {
   if (dealers.length === 0) {
     return (
       <div>
-        <AdminBreadcrumbs items={[{ label: "Vehicles", href: "/admin/vehicles" }, { label: "Add New" }]} />
-        <h1 className="text-2xl font-bold mb-2">Create Vehicle</h1>
-        <p className="text-muted-foreground">Add an approved dealer before creating vehicle listings.</p>
+        <AdminBreadcrumbs items={[{ label: "Vehicle Types", href: "/admin/vehicles" }, { label: "Add New" }]} />
+        <h1 className="text-2xl font-bold mb-2">Create Vehicle Type</h1>
+        <p className="text-muted-foreground">Add an approved dealer before creating vehicle types.</p>
       </div>
     );
   }
 
   return (
     <div className="max-w-5xl">
-      <AdminBreadcrumbs items={[{ label: "Vehicles", href: "/admin/vehicles" }, { label: "Add New" }]} />
+      <AdminBreadcrumbs items={[{ label: "Vehicle Types", href: "/admin/vehicles" }, { label: "Add New" }]} />
       <div className="mb-8">
-        <h1 className="text-2xl font-bold">Create Vehicle</h1>
+        <h1 className="text-2xl font-bold">Create Vehicle Type</h1>
         <p className="mt-1 text-muted-foreground">
-          Add a new rental listing to Everest Car Rental. Pending listings require moderation before going live.
+          Define a reusable rental template (specs, pricing, images). Then add physical units under Rental Fleet.
         </p>
       </div>
       <VehicleForm

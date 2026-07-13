@@ -6,6 +6,10 @@ import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
 import { formatPrice } from "@/lib/utils";
 import type { PricedRentalOptionLine } from "@/lib/rentals/option-catalog";
+import {
+  getRentalBookingDisplayStatus,
+  getRentalDisplayStatusBadgeClass,
+} from "@/lib/rentals/rental-booking-status";
 
 export type BookingRow = {
   id: string;
@@ -104,7 +108,13 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
       accessorKey: "paymentStatus",
       header: "Payment",
       cell: ({ row }) => (
-        <Badge className={row.original.paymentStatus === "PAID" ? "bg-green-100 text-green-800" : "bg-yellow-100 text-yellow-800"}>
+        <Badge
+          className={
+            row.original.paymentStatus === "PAID"
+              ? "bg-green-100 text-green-800"
+              : "bg-yellow-100 text-yellow-800"
+          }
+        >
           {row.original.paymentStatus}
         </Badge>
       ),
@@ -112,7 +122,16 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
     {
       accessorKey: "status",
       header: "Status",
-      cell: ({ row }) => <Badge variant="outline">{row.original.status}</Badge>,
+      cell: ({ row }) => {
+        const displayStatus = getRentalBookingDisplayStatus({
+          status: row.original.status,
+          pickupAt: row.original.pickupAt,
+          dropoffAt: row.original.dropoffAt,
+        });
+        return (
+          <Badge className={getRentalDisplayStatusBadgeClass(displayStatus)}>{displayStatus}</Badge>
+        );
+      },
     },
   ];
 

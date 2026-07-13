@@ -49,7 +49,6 @@ export default function RentalSearchCard({
               label="Pickup Address"
               value={values.pickupAddress}
               onChange={(v) => onChange("pickupAddress", v)}
-              onMapClick={() => setMapOpenFor("pickup")}
               error={errors.pickupAddress}
               required
             />
@@ -74,7 +73,7 @@ export default function RentalSearchCard({
               label="Drop-off Address"
               value={values.dropoffAddress}
               onChange={(v) => onChange("dropoffAddress", v)}
-              onMapClick={() => setMapOpenFor("dropoff")}
+              
               error={errors.dropoffAddress}
               required
             />

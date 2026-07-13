@@ -6,7 +6,10 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import { formatPrice } from "@/lib/utils";
 import { formatSaleBookingStatus } from "@/lib/sales/sale-booking-status";
-import { formatRentalBookingStatus } from "@/lib/rentals/rental-booking-status";
+import {
+  getRentalBookingDisplayStatus,
+  getRentalDisplayStatusBadgeClass,
+} from "@/lib/rentals/rental-booking-status";
 
 interface SaleBookingRecord {
   id: string;
@@ -44,15 +47,35 @@ interface SearchResult {
   totalCount: number;
 }
 
-function StatusBadge({ status, type }: { status: string; type: "sale" | "rental" }) {
-  const label = type === "sale" ? formatSaleBookingStatus(status as never) : formatRentalBookingStatus(status as never);
+function StatusBadge({
+  status,
+  type,
+  pickupAt,
+  dropoffAt,
+}: {
+  status: string;
+  type: "sale" | "rental";
+  pickupAt?: string;
+  dropoffAt?: string;
+}) {
+  if (type === "rental" && pickupAt && dropoffAt) {
+    const displayStatus = getRentalBookingDisplayStatus({ status, pickupAt, dropoffAt });
+    return (
+      <span
+        className={`rounded-full px-2.5 py-0.5 text-xs font-semibold ${getRentalDisplayStatusBadgeClass(displayStatus)}`}
+      >
+        {displayStatus}
+      </span>
+    );
+  }
+
+  const label = formatSaleBookingStatus(status as never);
   const colors: Record<string, string> = {
     PENDING: "bg-yellow-100 text-yellow-800",
     MEETING_SCHEDULED: "bg-blue-100 text-blue-800",
     DEAL_FINALIZED: "bg-purple-100 text-purple-800",
     PAID: "bg-green-100 text-green-800",
     COMPLETED: "bg-emerald-100 text-emerald-800",
-    CONFIRMED: "bg-green-100 text-green-800",
     CANCELLED: "bg-gray-100 text-gray-700",
   };
 
@@ -183,7 +206,12 @@ export default function MyBookingsClient() {
                       <p className="mt-1 text-lg font-bold text-gray-900">{record.vehicleName}</p>
                       <p className="mt-1 text-xs text-gray-500 font-mono">Ref: {record.id}</p>
                     </div>
-                    <StatusBadge status={record.status} type={record.type} />
+                    <StatusBadge
+                      status={record.status}
+                      type={record.type}
+                      pickupAt={record.type === "rental" ? record.pickupAt : undefined}
+                      dropoffAt={record.type === "rental" ? record.dropoffAt : undefined}
+                    />
                   </div>
 
                   <div className="mt-4 grid gap-2 text-sm text-gray-600 sm:grid-cols-2">

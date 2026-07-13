@@ -31,15 +31,20 @@ export default async function AdminVehiclesPage() {
 
   return (
     <div>
-      <AdminBreadcrumbs items={[{ label: "Rental Fleet" }]} />
+      <AdminBreadcrumbs items={[{ label: "Vehicle Types" }]} />
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold">Rental Fleet</h1>
-          <p className="text-muted-foreground">{vehicles.length} rental vehicles</p>
+          <h1 className="text-2xl font-bold">Vehicle Types</h1>
+          <p className="text-muted-foreground">
+            {vehicles.length} templates · manage physical cars in Rental Fleet
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
+          <Button asChild variant="outline">
+            <Link href="/admin/fleet">Rental Fleet</Link>
+          </Button>
           <Button asChild>
-            <Link href="/admin/vehicles/new"><Plus className="h-4 w-4" /> Add Vehicle</Link>
+            <Link href="/admin/vehicles/new"><Plus className="h-4 w-4" /> Add Vehicle Type</Link>
           </Button>
         </div>
       </div>

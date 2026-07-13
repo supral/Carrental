@@ -143,13 +143,20 @@ export async function createVehicle(
       createdById: user.id,
       rentalAvailableFrom: data.rentalAvailableFrom,
       rentalAvailableTo: data.rentalAvailableTo,
-      totalUnits: data.listingPurpose === ListingPurpose.RENTAL ? data.totalUnits : 1,
-      availableUnits: data.listingPurpose === ListingPurpose.RENTAL ? data.totalUnits : 1,
+      // Physical units are managed in Rental Fleet; start at zero until units are added.
+      totalUnits: 0,
+      availableUnits: 0,
       images: {
         create: data.imageUrls.map((url, order) => ({ url, order })),
       },
     },
   });
+
+  // Optional seed units when form still sends a fleet size (legacy create flow).
+  if (data.listingPurpose === ListingPurpose.RENTAL && (data.totalUnits ?? 0) > 0) {
+    const { ensureFleetUnitsForVehicle } = await import("@/lib/rentals/fleet-vehicles");
+    await ensureFleetUnitsForVehicle(vehicle.id, data.totalUnits ?? 1);
+  }
 
   if (templateValues?.length) {
     await saveVehicleTemplateValues(vehicle.id, templateValues);

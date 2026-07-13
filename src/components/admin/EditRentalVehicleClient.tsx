@@ -21,7 +21,6 @@ import type { FleetAvailability } from "@/lib/rentals/fleet-inventory";
 import type { VehicleDetailsDocument } from "@/lib/vehicles/vehicle-details";
 import type { CustomFieldInput } from "@/lib/vehicles/vehicle-specs-service";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -30,6 +29,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import RentalAvailabilityCalendar from "@/components/admin/RentalAvailabilityCalendar";
 
 interface VehicleTypeOption {
   id: string;
@@ -64,7 +64,6 @@ export default function EditRentalVehicleClient({
   const [error, setError] = useState("");
   const [selectedRentalOptionIds, setSelectedRentalOptionIds] = useState(vehicle.selectedRentalOptionIds);
   const [vehicleDetails, setVehicleDetails] = useState(vehicle.vehicleDetails);
-  const [totalUnits, setTotalUnits] = useState(String(vehicle.totalUnits));
   const [vehicleTypeId, setVehicleTypeId] = useState(vehicle.vehicleTypeId ?? "");
   const [selectedTemplateFieldIds, setSelectedTemplateFieldIds] = useState<string[]>([]);
   const [templateValueOverrides, setTemplateValueOverrides] = useState<TemplateFieldValueState>({});
@@ -118,19 +117,13 @@ export default function EditRentalVehicleClient({
 
   const handleSave = () => {
     setError("");
-    const parsedTotalUnits = Number(totalUnits);
-
-    if (!Number.isInteger(parsedTotalUnits) || parsedTotalUnits < 1) {
-      setError("Total rental units must be a whole number of at least 1.");
-      return;
-    }
 
     startTransition(async () => {
       try {
         await updateVehicleRentalOptions(
           vehicle.id,
           selectedRentalOptionIds,
-          parsedTotalUnits,
+          vehicle.fleetSnapshot.totalUnits,
           vehicleDetails,
           templateSelectionsToInputs(templateFields, selectedTemplateFieldIds, templateValueOverrides),
           customFields,
@@ -139,7 +132,7 @@ export default function EditRentalVehicleClient({
         router.push("/admin/vehicles");
         router.refresh();
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Failed to save rental fleet");
+        setError(err instanceof Error ? err.message : "Failed to save vehicle type");
       }
     });
   };
@@ -150,29 +143,37 @@ export default function EditRentalVehicleClient({
     <div>
       <AdminBreadcrumbs
         items={[
-          { label: "Vehicles", href: "/admin/vehicles" },
+          { label: "Vehicle Types", href: "/admin/vehicles" },
           { label: vehicle.title },
         ]}
       />
 
       <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Edit Rental Fleet</h1>
+          <h1 className="text-2xl font-bold">Edit Vehicle Type</h1>
           <p className="text-muted-foreground">{vehicle.title}</p>
           {listedSinceLabel && (
             <p className="mt-1 text-sm text-muted-foreground">Listed for rental since {listedSinceLabel}</p>
           )}
         </div>
-        <Button variant="outline" asChild>
-          <Link href="/admin/vehicles">Back to Vehicles</Link>
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button asChild>
+            <Link href={`/admin/fleet/new?vehicleId=${vehicle.id}`}>Add Fleet Unit</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href={`/admin/bookings/new?vehicleId=${vehicle.id}`}>Create Booking</Link>
+          </Button>
+          <Button variant="outline" asChild>
+            <Link href="/admin/vehicles">Back to Vehicle Types</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-6">
         <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <h2 className="text-lg font-semibold">Fleet Inventory</h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Stored unit counts update when bookings are confirmed, active, or completed.
+            Counts come from physical units in Rental Fleet. Availability for dates uses those units.
           </p>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
@@ -190,20 +191,14 @@ export default function EditRentalVehicleClient({
             </div>
           </div>
 
-          <div className="mt-4 max-w-xs">
-            <Label className="mb-1.5 block">Total Rental Units</Label>
-            <Input
-              type="number"
-              min={1}
-              step={1}
-              value={totalUnits}
-              onChange={(e) => setTotalUnits(e.target.value)}
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              Cannot be set below the number of units currently booked.
-            </p>
+          <div className="mt-4">
+            <Button asChild variant="outline">
+              <Link href={`/admin/fleet?vehicleId=${vehicle.id}`}>Manage fleet units</Link>
+            </Button>
           </div>
         </section>
+
+        <RentalAvailabilityCalendar vehicleId={vehicle.id} />
 
         <section className="rounded-xl border border-border bg-card p-6 shadow-sm">
           <h2 className="mb-4 text-lg font-semibold">Vehicle Type & Specifications</h2>

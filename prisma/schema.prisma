@@ -36,6 +36,15 @@ enum VehicleInventoryStatus {
   SOLD
 }
 
+/// Physical rental car status (fleet unit), separate from listing moderation.
+enum FleetVehicleStatus {
+  AVAILABLE
+  RENTED
+  MAINTENANCE
+  RESERVED
+  INACTIVE
+}
+
 enum VehicleCategory {
   CARS
   CARAVANS
@@ -339,10 +348,12 @@ model Vehicle {
   favorites    Favorite[]
   leads        Lead[]
   rentalBookings RentalBooking[]
+  fleetVehicles  FleetVehicle[]
   saleBookings SaleBooking[]
   moderatorNotes ModeratorNote[]
   rentalAvailableFrom DateTime?
   rentalAvailableTo   DateTime?
+  /// Cached fleet size (synced from FleetVehicle rows for rentals).
   totalUnits          Int                 @default(1)
   availableUnits      Int                 @default(1)
   rentalOptions       Json?
@@ -395,10 +406,39 @@ model SeasonOffer {
   @@index([isEnabled])
 }
 
+model FleetVehicle {
+  id                   String             @id @default(cuid())
+  /// Vehicle listing / type template this physical unit belongs to.
+  vehicleId            String
+  vehicle              Vehicle            @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  fleetNumber          String             @unique
+  registrationNumber   String?
+  vinNumber            String?
+  engineNumber         String?
+  odometer             Int?
+  color                String?
+  purchaseDate         DateTime?
+  purchaseCostCents    Int?
+  branch               String?
+  status               FleetVehicleStatus @default(AVAILABLE)
+  notes                String?            @db.Text
+  rentalBookings       RentalBooking[]
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+
+  @@index([vehicleId])
+  @@index([status])
+  @@index([registrationNumber])
+}
+
 model RentalBooking {
   id                   String              @id @default(cuid())
+  /// Vehicle type / listing template (customer-facing bookable product).
   vehicleId            String
   vehicle              Vehicle             @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+  /// Physical fleet unit assigned when the booking is confirmed.
+  fleetVehicleId       String?
+  fleetVehicle         FleetVehicle?       @relation(fields: [fleetVehicleId], references: [id], onDelete: SetNull)
   status               RentalBookingStatus @default(PENDING)
   inventoryHeld        Boolean             @default(false)
   pickupAddress        String
@@ -430,6 +470,7 @@ model RentalBooking {
   updatedAt            DateTime            @updatedAt
 
   @@index([vehicleId])
+  @@index([fleetVehicleId])
   @@index([status])
   @@index([pickupAt, dropoffAt])
 }

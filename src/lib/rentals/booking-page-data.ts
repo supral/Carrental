@@ -1,8 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { ListingPurpose, Prisma, VehicleStatus } from "@prisma/client";
 import {
-  blockingRentalBookingFilter,
-  rentalDateOverlapFilter,
+  computeDateRangeAvailability,
+  getPeakReservedUnitsForRange,
   type DateRange,
   type FleetAvailability,
 } from "@/lib/rentals/fleet-inventory";
@@ -85,7 +85,7 @@ export async function loadRentalBookingPageData(
   vehicleId: string,
   range: DateRange
 ): Promise<RentalBookingPageData | null> {
-  const [row, reservedForRange] = await Promise.all([
+  const [row, peakReservedForRange] = await Promise.all([
     prisma.vehicle.findFirst({
       where: {
         id: vehicleId,
@@ -94,29 +94,14 @@ export async function loadRentalBookingPageData(
       },
       select: rentalBookingSelect,
     }),
-    prisma.rentalBooking.count({
-      where: {
-        vehicleId,
-        ...rentalDateOverlapFilter(range.pickupAt, range.dropoffAt),
-        ...blockingRentalBookingFilter(),
-      },
-    }),
+    getPeakReservedUnitsForRange(vehicleId, range),
   ]);
 
   if (!row) return null;
 
-  const totalUnits = Math.max(1, row.totalUnits ?? 1);
-  const storedAvailable = Math.max(0, row.availableUnits ?? totalUnits);
-  const rangeAvailable = Math.max(0, totalUnits - reservedForRange);
-  const availableUnits = Math.min(storedAvailable, rangeAvailable);
-
   return {
     vehicle: mapBookingVehicle(row),
-    fleetAvailability: {
-      totalUnits,
-      reservedUnits: totalUnits - availableUnits,
-      availableUnits,
-    },
+    fleetAvailability: computeDateRangeAvailability(row.totalUnits, peakReservedForRange),
     vehicleOptions: parseVehicleRentalOptions(row.rentalOptions),
   };
 }

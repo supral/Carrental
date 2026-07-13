@@ -194,7 +194,7 @@ export default function VehicleForm({
       location: siteConfig.location,
       status: canPublishLive ? VehicleStatus.ACTIVE : VehicleStatus.PENDING,
       featured: false,
-      totalUnits: 1,
+      totalUnits: 0,
       dealerId: dealers[0]?.id ?? "",
       imageUrls: "",
     },
@@ -513,12 +513,17 @@ export default function VehicleForm({
 
       {isRental && (
         <FieldGroup
-          title="Fleet Inventory"
-          description="How many identical units of this vehicle model are in your rental fleet."
+          title="Physical fleet units"
+          description="Physical cars are managed separately so you can reuse this type for many units."
         >
-          <Field label="Total Rental Units" error={errors.totalUnits?.message} className="max-w-xs">
-            <Input type="number" min={1} step={1} {...register("totalUnits", { valueAsNumber: true })} />
-          </Field>
+          <p className="text-sm text-muted-foreground">
+            After saving this vehicle type, add units under{" "}
+            <a href="/admin/fleet" className="font-medium text-primary hover:underline">
+              Rental Fleet
+            </a>
+            . Availability on the website is calculated from those units.
+          </p>
+          <input type="hidden" {...register("totalUnits", { valueAsNumber: true })} />
         </FieldGroup>
       )}
 

@@ -3,9 +3,9 @@ import { ListingPurpose, Prisma, RentalBookingStatus, RentalPaymentStatus, Vehic
 import { isWithinRentalAvailabilityWindow } from "@/lib/rentals/availability-window";
 import {
   assertFleetUnitsAvailable,
-  blockingRentalBookingFilter,
+  computeDateRangeAvailability,
+  getFleetAvailabilityBatch,
   NO_VEHICLES_AVAILABLE_MESSAGE,
-  rentalDateOverlapFilter,
 } from "@/lib/rentals/fleet-inventory";
 import { RentalUnavailableError } from "@/lib/rentals/rental-errors";
 import { handleRentalBookingStatusChange } from "@/lib/rentals/rental-inventory-units";
@@ -49,43 +49,24 @@ export async function searchAvailableRentalVehicles(input: RentalAvailabilitySea
   const limit = Math.min(100, Math.max(1, input.limit || 12));
   const vehicleWhere = buildRentalSearchVehicleWhere(pickupAt, dropoffAt);
 
-  const [rows, reservationCounts] = await Promise.all([
-    prisma.vehicle.findMany({
-      where: vehicleWhere,
-      include: rentalSearchInclude,
-      orderBy: { price: "asc" },
-    }),
-    prisma.rentalBooking.groupBy({
-      by: ["vehicleId"],
-      where: {
-        vehicle: vehicleWhere,
-        ...rentalDateOverlapFilter(pickupAt, dropoffAt),
-        ...blockingRentalBookingFilter(),
-      },
-      _count: { _all: true },
-    }),
-  ]);
+  const rows = await prisma.vehicle.findMany({
+    where: vehicleWhere,
+    include: rentalSearchInclude,
+    orderBy: { price: "asc" },
+  });
 
-  const reservedByVehicleId = new Map(
-    reservationCounts.map((row) => [row.vehicleId, row._count._all])
+  const fleetByVehicleId = await getFleetAvailabilityBatch(
+    rows.map((vehicle) => vehicle.id),
+    { pickupAt, dropoffAt }
   );
 
   const availableRows = rows
     .map((vehicle) => {
-      const totalUnits = Math.max(1, vehicle.totalUnits ?? 1);
-      const storedAvailable = Math.max(0, vehicle.availableUnits ?? totalUnits);
-      const reservedForRange = reservedByVehicleId.get(vehicle.id) ?? 0;
-      const rangeAvailable = Math.max(0, totalUnits - reservedForRange);
-      const availableUnits = Math.min(storedAvailable, rangeAvailable);
+      const fleet =
+        fleetByVehicleId.get(vehicle.id) ??
+        computeDateRangeAvailability(vehicle.totalUnits, 0);
 
-      return {
-        vehicle,
-        fleet: {
-          totalUnits,
-          reservedUnits: totalUnits - availableUnits,
-          availableUnits,
-        },
-      };
+      return { vehicle, fleet };
     })
     .filter(({ fleet }) => fleet.availableUnits > 0);
   const total = availableRows.length;

@@ -13,8 +13,20 @@ export function isWithinRentalAvailabilityWindow(
   availableFrom: Date | null | undefined,
   availableTo: Date | null | undefined
 ): boolean {
-  if (availableFrom && pickupAt < availableFrom) return false;
-  if (availableTo && dropoffAt > availableTo) return false;
+  if (availableFrom) {
+    const from = new Date(availableFrom);
+    from.setHours(0, 0, 0, 0);
+    const pickupDay = new Date(pickupAt);
+    pickupDay.setHours(0, 0, 0, 0);
+    if (pickupDay < from) return false;
+  }
+
+  if (availableTo) {
+    const to = new Date(availableTo);
+    to.setHours(23, 59, 59, 999);
+    if (dropoffAt > to) return false;
+  }
+
   return true;
 }
 

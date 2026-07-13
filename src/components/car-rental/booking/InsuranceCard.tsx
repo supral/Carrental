@@ -8,10 +8,17 @@ interface InsuranceCardProps {
   option: VehicleRentalOptionConfig;
   label: string;
   selected: boolean;
-  onToggle: (selected: boolean) => void;
+  name: string;
+  onSelect: () => void;
 }
 
-export default function InsuranceCard({ option, label, selected, onToggle }: InsuranceCardProps) {
+export default function InsuranceCard({
+  option,
+  label,
+  selected,
+  name,
+  onSelect,
+}: InsuranceCardProps) {
   const description = option.description ?? "";
   const priceLabel =
     option.price != null && option.priceType
@@ -28,10 +35,11 @@ export default function InsuranceCard({ option, label, selected, onToggle }: Ins
       )}
     >
       <input
-        type="checkbox"
+        type="radio"
+        name={name}
         checked={selected}
-        onChange={(e) => onToggle(e.target.checked)}
-        className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+        onChange={onSelect}
+        className="mt-1 h-4 w-4 border-gray-300 text-primary focus:ring-primary"
       />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-2">
@@ -42,7 +50,9 @@ export default function InsuranceCard({ option, label, selected, onToggle }: Ins
             </span>
           )}
         </div>
-        <p className="mt-2 text-sm leading-relaxed text-gray-600">{description}</p>
+        {description && (
+          <p className="mt-2 text-sm leading-relaxed text-gray-600">{description}</p>
+        )}
       </div>
     </label>
   );

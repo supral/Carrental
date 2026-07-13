@@ -13,8 +13,7 @@ export default function Footer() {
           <div className="space-y-4">
             <Logo variant="footer" />
             <p className="max-w-sm text-sm leading-relaxed text-blue-200/70">
-              Everest Rental is a Winnellie-based car rental company offering a wide range of vehicles at
-              competitive prices.
+            Everest Rental is a trusted car rental company based in Winnellie, offering a wide range of quality vehicles at competitive prices. From compact cars and SUVs to utes and vans, we provide reliable, affordable rental solutions backed by friendly service and flexible booking options for both locals and visitors.
             </p>
           </div>
 

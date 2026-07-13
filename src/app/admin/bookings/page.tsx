@@ -1,10 +1,13 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import AdminBreadcrumbs from "@/components/admin/AdminBreadcrumbs";
 import BookingsTable from "@/components/admin/BookingsTable";
+import { Button } from "@/components/ui/button";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { parsePricedRentalOptionLines } from "@/lib/rentals/option-catalog";
+import { Plus } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -50,9 +53,17 @@ export default async function AdminBookingsPage() {
   return (
     <div>
       <AdminBreadcrumbs items={[{ label: "Rental Bookings" }]} />
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold">Rental Bookings</h1>
-        <p className="text-muted-foreground">{rows.length} total bookings</p>
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold">Rental Bookings</h1>
+          <p className="text-muted-foreground">{rows.length} total bookings</p>
+        </div>
+        <Button asChild>
+          <Link href="/admin/bookings/new">
+            <Plus className="mr-1.5 h-4 w-4" />
+            Create Booking
+          </Link>
+        </Button>
       </div>
       <BookingsTable bookings={rows} />
     </div>

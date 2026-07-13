@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard, Car, FileText,
-  BarChart3, Settings, Bell, Image, Package,
+  BarChart3, Settings, Bell, Image, Package, Layers,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -14,7 +14,8 @@ import AdminBrand from "@/components/admin/AdminBrand";
 
 const navItems: { href: string; label: string; icon: React.ElementType; permission?: AdminPermission }[] = [
   { href: "/admin", label: "Dashboard", icon: LayoutDashboard, permission: "dashboard:view" },
-  { href: "/admin/vehicles", label: "Rental Fleet", icon: Car, permission: "vehicles:view" },
+  { href: "/admin/fleet", label: "Rental Fleet", icon: Car, permission: "vehicles:view" },
+  { href: "/admin/vehicles", label: "Vehicle Types", icon: Layers, permission: "vehicles:view" },
   { href: "/admin/rental-options", label: "Rental Options", icon: Package, permission: "vehicles:view" },
   { href: "/admin/bookings", label: "Rental Bookings", icon: FileText, permission: "vehicles:view" },
   { href: "/admin/media", label: "Media", icon: Image, permission: "content:manage" },

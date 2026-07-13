@@ -38,7 +38,7 @@ export const createVehicleSchema = z.object({
   location: z.string().min(1, "Location is required"),
   status: z.nativeEnum(VehicleStatus),
   featured: z.boolean(),
-  totalUnits: z.number().int().min(1, "Fleet size must be at least 1").optional(),
+  totalUnits: z.number().int().min(0).optional(),
   vehicleTypeId: z.string().optional(),
   dealerId: z.string().min(1, "Dealer is required"),
   imageUrls: z.string().optional(),
@@ -51,15 +51,6 @@ export const createVehicleSchema = z.object({
         path: ["vehicleNumber"],
       });
     }
-    return;
-  }
-
-  if (!data.totalUnits || data.totalUnits < 1) {
-    ctx.addIssue({
-      code: z.ZodIssueCode.custom,
-      message: "Fleet size must be at least 1",
-      path: ["totalUnits"],
-    });
   }
 });
 
@@ -116,7 +107,7 @@ export function parseVehicleForm(
     details,
     status: values.status,
     featured: values.featured,
-    totalUnits: values.listingPurpose === ListingPurpose.RENTAL ? (values.totalUnits ?? 1) : 1,
+    totalUnits: values.listingPurpose === ListingPurpose.RENTAL ? (values.totalUnits ?? 0) : 1,
     dealerId: values.dealerId,
     imageUrls,
     rentalAvailableFrom: values.listingPurpose === ListingPurpose.RENTAL ? new Date() : null,

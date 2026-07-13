@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
-import { Fuel, Gauge, MapPin, Star, Users } from "lucide-react";
+import { Car, DoorOpen, Fuel, Gauge, Palette, Users } from "lucide-react";
 import type { RentalBookingContext, RentalVehicleResult } from "@/types/rental";
 import { formatPrice } from "@/lib/utils";
 import { formatVehicleName } from "@/lib/vehicles/display";
@@ -37,23 +37,37 @@ export default function RentalResultCard({ vehicle, searchContext }: RentalResul
       </div>
 
       <div className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{vehicle.make}</p>
-            <h3 className="text-lg font-bold text-gray-900">{vehicle.model}</h3>
-            <p className="text-sm text-gray-600">{vehicle.year} · {vehicle.bodyType}</p>
-          </div>
-          <div className="flex items-center gap-1 rounded-full bg-amber-50 px-2.5 py-1 text-sm font-semibold text-amber-700">
-            <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
-            {vehicle.rating.toFixed(1)}
-          </div>
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{vehicle.make}</p>
+          <h3 className="text-lg font-bold text-gray-900">{vehicle.model}</h3>
+          <p className="text-sm text-gray-600">{vehicle.year} · {vehicle.bodyType}</p>
         </div>
 
         <div className="mt-4 grid grid-cols-2 gap-2 text-sm text-gray-600">
-          <span className="flex items-center gap-1.5"><Gauge className="h-4 w-4" /> {vehicle.transmission}</span>
-          <span className="flex items-center gap-1.5"><Fuel className="h-4 w-4" /> {vehicle.fuelType}</span>
-          <span className="flex items-center gap-1.5"><Users className="h-4 w-4" /> {vehicle.seats} Seats</span>
-          <span className="flex items-center gap-1.5"><MapPin className="h-4 w-4" /> {vehicle.location}</span>
+          <span className="flex items-center gap-1.5">
+            <Gauge className="h-4 w-4 shrink-0" />
+            {vehicle.transmission}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Fuel className="h-4 w-4 shrink-0" />
+            {vehicle.fuelType}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Users className="h-4 w-4 shrink-0" />
+            {vehicle.seats} Seats
+          </span>
+          <span className="flex items-center gap-1.5">
+            <DoorOpen className="h-4 w-4 shrink-0" />
+            {vehicle.doors} Doors
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Car className="h-4 w-4 shrink-0" />
+            {vehicle.driveType}
+          </span>
+          <span className="flex items-center gap-1.5">
+            <Palette className="h-4 w-4 shrink-0" />
+            {vehicle.color}
+          </span>
         </div>
 
         {availabilityWindow && (

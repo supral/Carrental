@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { ListingPurpose, VehicleStatus } from "@prisma/client";
-import { countActiveReservations, type FleetAvailability } from "@/lib/rentals/fleet-inventory";
+import { getPeakReservedUnitsForRange, computeDateRangeAvailability, type FleetAvailability } from "@/lib/rentals/fleet-inventory";
 import { getDynamicVehicleRentalOptions } from "@/lib/rentals/dynamic-rental-options";
 import type { VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
 import type { Vehicle } from "@/types";
@@ -71,18 +71,9 @@ function mapToBookingVehicle(row: RentalBookingVehicleRow): Vehicle {
 
 function buildFleetAvailability(
   vehicleRow: RentalBookingVehicleRow,
-  reservedForRange: number
+  peakReservedForRange: number
 ): FleetAvailability {
-  const totalUnits = Math.max(1, vehicleRow.totalUnits ?? 1);
-  const storedAvailable = Math.max(0, vehicleRow.availableUnits ?? totalUnits);
-  const rangeAvailable = Math.max(0, totalUnits - reservedForRange);
-  const availableUnits = Math.min(storedAvailable, rangeAvailable);
-
-  return {
-    totalUnits,
-    reservedUnits: totalUnits - availableUnits,
-    availableUnits,
-  };
+  return computeDateRangeAvailability(vehicleRow.totalUnits, peakReservedForRange);
 }
 
 export type RentalBookPageData = {
@@ -106,7 +97,7 @@ export async function getRentalBookPageData(
       },
       select: rentalBookingVehicleSelect,
     }),
-    countActiveReservations(vehicleId, { pickupAt, dropoffAt }),
+    getPeakReservedUnitsForRange(vehicleId, { pickupAt, dropoffAt }),
     getDynamicVehicleRentalOptions(vehicleId),
   ]);
 

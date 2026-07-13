@@ -7,8 +7,9 @@ import { format } from "date-fns";
 import { formatPrice } from "@/lib/utils";
 import {
   RENTAL_BOOKING_STATUS_STEPS,
-  formatRentalBookingStatus,
+  getRentalBookingDisplayStatus,
   getRentalCurrentStepIndex,
+  getRentalDisplayStatusBadgeClass,
 } from "@/lib/rentals/rental-booking-status";
 import { RentalBookingStatus, RentalPaymentStatus } from "@prisma/client";
 import { cn } from "@/lib/utils";
@@ -80,8 +81,17 @@ export default function RentalBookingStatusClient() {
     );
   }
 
-  const currentStep = getRentalCurrentStepIndex(booking.status, booking.paymentStatus);
+  const trip = { pickupAt: booking.pickupAt, dropoffAt: booking.dropoffAt };
+  const currentStep = getRentalCurrentStepIndex(
+    booking.status,
+    booking.paymentStatus,
+    trip
+  );
   const isCancelled = booking.status === RentalBookingStatus.CANCELLED;
+  const displayStatus = getRentalBookingDisplayStatus({
+    status: booking.status,
+    ...trip,
+  });
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6 lg:py-14">
@@ -99,7 +109,11 @@ export default function RentalBookingStatusClient() {
         ) : (
           <ol className="mt-8 space-y-0">
             {RENTAL_BOOKING_STATUS_STEPS.map((step, index) => {
-              const isComplete = step.isComplete(booking.status, booking.paymentStatus);
+              const isComplete = step.isComplete(
+                booking.status,
+                booking.paymentStatus,
+                trip
+              );
               const isCurrent = currentStep === index;
               const isLast = index === RENTAL_BOOKING_STATUS_STEPS.length - 1;
 
@@ -156,7 +170,14 @@ export default function RentalBookingStatusClient() {
         <div className="mt-8 rounded-xl border border-gray-100 bg-gray-50 p-4 text-sm text-gray-700">
           <p>
             <span className="font-semibold text-gray-900">Status:</span>{" "}
-            {formatRentalBookingStatus(booking.status)}
+            <span
+              className={cn(
+                "rounded-full px-2.5 py-0.5 text-xs font-semibold",
+                getRentalDisplayStatusBadgeClass(displayStatus)
+              )}
+            >
+              {displayStatus}
+            </span>
           </p>
           <p className="mt-2">
             <span className="font-semibold text-gray-900">Pickup:</span>{" "}

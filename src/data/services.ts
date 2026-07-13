@@ -70,15 +70,15 @@ export const siteConfig = {
   name: "Everest Car Rental",
   shortName: "Everest Rental",
   tagline: "Hassle-free car rental in Darwin",
-  phone: "0411 528 466",
+  phone: "(08) 8947 0556",
   email: "reservations@everestcarrental.com",
   address: "482 Stuart Hwy Winnellie NT 0820",
   mapQuery: "482 Stuart Hwy Winnellie NT 0820",
   location: "482 Stuart Hwy Winnellie NT 0820",
   hours: {
     weekdays: "Mon–Fri: 8:00 AM – 5:00 PM",
-    saturday: "Sat: 8:00 AM – 5:00 PM",
-    sunday: "Sun: Closed",
+    saturday: "Sat: 9:00 AM – 3:00 PM",
+    sunday: "Sun: Closed(Drop-off & Pickup on demand)",
     utilityBar: "Mon–Fri 8:00 AM – 5:00 PM",
   },
   social: {
