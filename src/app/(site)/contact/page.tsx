@@ -28,21 +28,25 @@ export default async function ContactPage({
       />
 
       <section className="py-12 sm:py-16 lg:py-20">
-        <div className="mx-auto max-w-3xl px-4 sm:px-6 lg:px-8">
-          <div className={videoPanel}>
-            <div className="mb-6 sm:mb-8 text-center">
-              <h2 className="text-2xl sm:text-3xl font-bold text-gray-900">Send a Message</h2>
-              <p className="mt-2 text-sm sm:text-base text-gray-600">
-                Ask about rentals, bookings, or anything else — we&apos;re happy to help.
-              </p>
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-2 lg:gap-8 xl:gap-10">
+            <div className={videoPanel}>
+              <ContactSection />
             </div>
 
-            <EnquiryForm type="contact" />
+            <div className={videoPanel}>
+              <div className="mb-6 sm:mb-8">
+                <h2 className="text-2xl font-bold text-gray-900 sm:text-3xl">Send a Message</h2>
+                <p className="mt-2 text-sm text-gray-600 sm:text-base">
+                  Ask about rentals, bookings, or anything else — we&apos;re happy to help.
+                </p>
+              </div>
+
+              <EnquiryForm type="contact" compact />
+            </div>
           </div>
         </div>
       </section>
-
-      <ContactSection />
     </VideoPageShell>
   );
 }

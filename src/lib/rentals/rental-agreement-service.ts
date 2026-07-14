@@ -92,7 +92,7 @@ export async function sendOrResendAgreementRequestEmail(bookingId: string) {
       booking.agreementTokenExpiresAt.getTime() < Date.now());
 
   let token = booking.agreementToken;
-  let status = booking.status;
+  let status: RentalBookingStatus = booking.status;
 
   if (
     tokenExpired ||
