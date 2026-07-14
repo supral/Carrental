@@ -3,6 +3,12 @@ interface SendEmailInput {
   subject: string;
   text: string;
   html?: string;
+  attachments?: Array<{
+    filename: string;
+    path?: string;
+    content?: Buffer | string;
+    contentType?: string;
+  }>;
 }
 
 function getSmtpConfig() {
@@ -23,7 +29,13 @@ export function isEmailConfigured(): boolean {
   return getSmtpConfig() !== null;
 }
 
-export async function sendEmail({ to, subject, text, html }: SendEmailInput): Promise<void> {
+export async function sendEmail({
+  to,
+  subject,
+  text,
+  html,
+  attachments,
+}: SendEmailInput): Promise<void> {
   const recipients = Array.isArray(to) ? to : [to];
   const smtp = getSmtpConfig();
 
@@ -32,6 +44,7 @@ export async function sendEmail({ to, subject, text, html }: SendEmailInput): Pr
       to: recipients,
       subject,
       text,
+      attachments: attachments?.map((item) => item.filename),
     });
     return;
   }
@@ -61,5 +74,6 @@ export async function sendEmail({ to, subject, text, html }: SendEmailInput): Pr
     subject,
     text,
     html: html ?? text.replace(/\n/g, "<br>"),
+    attachments,
   });
 }

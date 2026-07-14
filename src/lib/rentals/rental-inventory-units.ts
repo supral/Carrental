@@ -7,18 +7,18 @@ import {
   getPeakConcurrentReservations,
 } from "@/lib/rentals/fleet-inventory";
 
+import {
+  WORKFLOW_INVENTORY_CONSUMING_STATUSES,
+  WORKFLOW_INVENTORY_RELEASING_STATUSES,
+} from "@/lib/rentals/rental-workflow";
+
 /** Statuses that consume a stored fleet unit. */
-export const INVENTORY_CONSUMING_STATUSES: RentalBookingStatus[] = [
-  RentalBookingStatus.RESERVED,
-  RentalBookingStatus.CONFIRMED,
-  RentalBookingStatus.ACTIVE,
-];
+export const INVENTORY_CONSUMING_STATUSES: RentalBookingStatus[] =
+  WORKFLOW_INVENTORY_CONSUMING_STATUSES;
 
 /** Statuses that release a stored fleet unit. */
-export const INVENTORY_RELEASING_STATUSES: RentalBookingStatus[] = [
-  RentalBookingStatus.CANCELLED,
-  RentalBookingStatus.COMPLETED,
-];
+export const INVENTORY_RELEASING_STATUSES: RentalBookingStatus[] =
+  WORKFLOW_INVENTORY_RELEASING_STATUSES;
 
 export function isInventoryConsumingStatus(status: RentalBookingStatus): boolean {
   return INVENTORY_CONSUMING_STATUSES.includes(status);
@@ -123,8 +123,7 @@ export async function handleRentalBookingStatusChange(
 
   if (!wasConsuming && isConsuming) {
     await applyRentalInventoryHold(bookingId, client);
-    const { assignFleetVehicleToBooking } = await import("@/lib/rentals/fleet-vehicles");
-    await assignFleetVehicleToBooking(bookingId, client);
+    // Physical unit is assigned explicitly during admin pickup — inventory only.
     return;
   }
 

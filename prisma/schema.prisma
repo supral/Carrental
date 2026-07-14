@@ -100,7 +100,12 @@ enum RentalBookingStatus {
   PENDING
   RESERVED
   CONFIRMED
+  WAITING_FOR_CUSTOMER_FORM
+  WAITING_FOR_VEHICLE_ASSIGNMENT
+  READY_FOR_PICKUP
   ACTIVE
+  RETURNED
+  AWAITING_PAYMENT
   CANCELLED
   COMPLETED
 }
@@ -108,6 +113,8 @@ enum RentalBookingStatus {
 enum RentalPaymentStatus {
   UNPAID
   PAID
+  PARTIAL
+  PENDING
   FAILED
   REFUNDED
 }
@@ -416,6 +423,12 @@ model FleetVehicle {
   vinNumber            String?
   engineNumber         String?
   odometer             Int?
+  /// Current odometer reading used on pickup/return (synced from odometer when missing).
+  currentKm            Int?
+  currentFuelLevel     String?
+  fuelType             String?
+  transmission         String?
+  year                 Int?
   color                String?
   purchaseDate         DateTime?
   purchaseCostCents    Int?
@@ -423,6 +436,7 @@ model FleetVehicle {
   status               FleetVehicleStatus @default(AVAILABLE)
   notes                String?            @db.Text
   rentalBookings       RentalBooking[]
+  rentalHistory        VehicleRentalHistory[]
   createdAt            DateTime           @default(now())
   updatedAt            DateTime           @updatedAt
 
@@ -436,7 +450,7 @@ model RentalBooking {
   /// Vehicle type / listing template (customer-facing bookable product).
   vehicleId            String
   vehicle              Vehicle             @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
-  /// Physical fleet unit assigned when the booking is confirmed.
+  /// Physical fleet unit assigned at pickup/assignment stage.
   fleetVehicleId       String?
   fleetVehicle         FleetVehicle?       @relation(fields: [fleetVehicleId], references: [id], onDelete: SetNull)
   status               RentalBookingStatus @default(PENDING)
@@ -466,6 +480,49 @@ model RentalBooking {
   stripeCheckoutSessionId String?          @unique
   stripePaymentIntentId   String?
   paidAt               DateTime?
+
+  /// Digital agreement access
+  agreementToken          String?   @unique
+  agreementTokenExpiresAt DateTime?
+  customerFormCompletedAt DateTime?
+  termsAcceptedAt         DateTime?
+  termsFlags              Json?
+
+  /// Pickup / return operational fields
+  kmOut                   Int?
+  expectedKmIn            Int?
+  kmIn                    Int?
+  fuelOut                 String?
+  fuelIn                  String?
+  dailyRateCents          Int?
+  dailyLimitKm            Int?
+  excessKmRateCents       Int?
+  bondCents               Int?
+  insuranceNotes          String?   @db.Text
+  timeOut                 DateTime?
+  expectedReturnAt        DateTime?
+  returnedAt              DateTime?
+  lateReturn              Boolean   @default(false)
+  damageNotes             String?   @db.Text
+  damagePhotoUrls         String[]  @default([])
+  accessoriesChecklist    Json?
+  adminPickupSignatureUrl String?
+  adminReturnSignatureUrl String?
+
+  /// Charges (cents)
+  extraKmChargeCents      Int       @default(0)
+  fuelChargeCents         Int       @default(0)
+  lateFeeCents            Int       @default(0)
+  damageChargeCents       Int       @default(0)
+  outstandingBalanceCents Int       @default(0)
+  settlementPaidAt        DateTime?
+
+  agreementPdfUrl         String?
+
+  drivers                 RentalDriver[]
+  documents               RentalDocument[]
+  rentalHistory           VehicleRentalHistory[]
+
   createdAt            DateTime            @default(now())
   updatedAt            DateTime            @updatedAt
 
@@ -473,6 +530,65 @@ model RentalBooking {
   @@index([fleetVehicleId])
   @@index([status])
   @@index([pickupAt, dropoffAt])
+}
+
+model RentalDriver {
+  id              String        @id @default(cuid())
+  bookingId       String
+  booking         RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  isPrimary       Boolean       @default(false)
+  sortOrder       Int           @default(0)
+  firstName       String
+  lastName        String
+  dob             DateTime?
+  phone           String?
+  email           String?
+  address         String?
+  emergencyContact String?
+  emergencyPhone   String?
+  licenceNumber   String?
+  licenceExpiry   DateTime?
+  licenceFrontUrl String?
+  licenceBackUrl  String?
+  signatureUrl    String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  @@index([bookingId])
+}
+
+model RentalDocument {
+  id             String        @id @default(cuid())
+  bookingId      String
+  booking        RentalBooking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  pdfUrl         String
+  customerSigned Boolean       @default(false)
+  adminSigned    Boolean       @default(false)
+  generatedAt    DateTime      @default(now())
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([bookingId])
+}
+
+model VehicleRentalHistory {
+  id              String         @id @default(cuid())
+  fleetVehicleId  String
+  fleetVehicle    FleetVehicle   @relation(fields: [fleetVehicleId], references: [id], onDelete: Cascade)
+  bookingId       String
+  booking         RentalBooking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customerName    String?
+  pickupAt        DateTime?
+  returnAt        DateTime?
+  kmOut           Int?
+  kmIn            Int?
+  damageNotes     String?        @db.Text
+  totalChargesCents Int          @default(0)
+  agreementPdfUrl String?
+  createdAt       DateTime       @default(now())
+
+  @@index([fleetVehicleId])
+  @@index([bookingId])
 }
 
 model SaleBooking {

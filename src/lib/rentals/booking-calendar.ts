@@ -33,6 +33,7 @@ export type BookingCalendarVehicle = {
   id: string;
   title: string;
   colorIndex: number;
+  totalUnits: number;
 };
 
 const COLOR_COUNT = 6;
@@ -56,6 +57,7 @@ export async function getBookingCalendarVehicles() {
       model: true,
       year: true,
       vehicleNumber: true,
+      totalUnits: true,
     },
     orderBy: [{ make: "asc" }, { model: "asc" }],
   });
@@ -64,6 +66,7 @@ export async function getBookingCalendarVehicles() {
     id: vehicle.id,
     title: formatVehicleName(vehicle),
     colorIndex: colorIndexForId(vehicle.id),
+    totalUnits: Math.max(1, vehicle.totalUnits ?? 1),
   }));
 }
 

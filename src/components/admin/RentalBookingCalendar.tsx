@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import {
   addDays,
   addMonths,
@@ -9,6 +10,7 @@ import {
   endOfMonth,
   endOfWeek,
   format,
+  isBefore,
   isSameDay,
   isSameMonth,
   max as maxDate,
@@ -60,11 +62,36 @@ type Props = {
   className?: string;
 };
 
+function countOverlappingBookings(date: Date, events: BookingCalendarEvent[]) {
+  const dayStart = startOfDay(date);
+  const dayEnd = addDays(dayStart, 1);
+  return events.filter((event) => {
+    const pickup = parseISO(event.pickupAt);
+    const dropoff = parseISO(event.dropoffAt);
+    return pickup < dayEnd && dropoff > dayStart;
+  }).length;
+}
+
+function isRangeAvailable(
+  pickupKey: string,
+  dropoffKey: string,
+  events: BookingCalendarEvent[],
+  totalUnits: number
+) {
+  const start = parseISO(pickupKey);
+  const end = parseISO(dropoffKey);
+  if (end < start) return false;
+  return eachDayOfInterval({ start, end }).every(
+    (day) => countOverlappingBookings(day, events) < totalUnits
+  );
+}
+
 export default function RentalBookingCalendar({
   initialVehicleId = null,
   lockedVehicleId = null,
   className = "",
 }: Props) {
+  const router = useRouter();
   const { toast } = useAdminToast();
   const [pending, startTransition] = useTransition();
   const [anchor, setAnchor] = useState(() => startOfMonth(new Date()));
@@ -75,6 +102,8 @@ export default function RentalBookingCalendar({
   const [vehicles, setVehicles] = useState<BookingCalendarVehicle[]>([]);
   const [events, setEvents] = useState<BookingCalendarEvent[]>([]);
   const [selected, setSelected] = useState<BookingCalendarEvent | null>(null);
+  const [pickupDate, setPickupDate] = useState<string | null>(null);
+  const [dropoffDate, setDropoffDate] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [refreshNonce, setRefreshNonce] = useState(0);
 
@@ -118,10 +147,26 @@ export default function RentalBookingCalendar({
     return events.filter((event) => event.vehicleId === vehicleFilter);
   }, [events, vehicleFilter]);
 
+  const selectedVehicle = useMemo(
+    () => vehicles.find((vehicle) => vehicle.id === vehicleFilter) ?? null,
+    [vehicles, vehicleFilter]
+  );
+  const bookingEnabled = Boolean(vehicleFilter && selectedVehicle);
+
   const title =
     view === "week"
       ? `${format(weekDays[0], "d MMM")} – ${format(weekDays[6], "d MMM yyyy")}`
       : format(anchor, "MMMM yyyy");
+
+  function clearDateSelection() {
+    setPickupDate(null);
+    setDropoffDate(null);
+  }
+
+  function setVehicleAndClearSelection(nextVehicleId: string | null) {
+    setVehicleFilter(nextVehicleId);
+    clearDateSelection();
+  }
 
   function goToday() {
     const today = new Date();
@@ -136,6 +181,71 @@ export default function RentalBookingCalendar({
     setAnchor((current) => (view === "week" ? addWeeks(current, 1) : addMonths(current, 1)));
   }
 
+  function openCreateBooking(nextPickup: string, nextDropoff: string) {
+    if (!vehicleFilter) return;
+    const params = new URLSearchParams({
+      vehicleId: vehicleFilter,
+      pickupDate: nextPickup,
+      dropoffDate: nextDropoff,
+    });
+    router.push(`/admin/bookings/new?${params.toString()}`);
+  }
+
+  function handleDayClick(date: Date) {
+    if (!vehicleFilter || !selectedVehicle) {
+      toast({
+        type: "error",
+        message: "Select a vehicle first, then click available dates to book.",
+      });
+      return;
+    }
+
+    const today = startOfDay(new Date());
+    const day = startOfDay(date);
+    if (isBefore(day, today)) {
+      toast({ type: "error", message: "Pickup cannot be in the past." });
+      return;
+    }
+
+    const dateKey = format(day, "yyyy-MM-dd");
+    const reserved = countOverlappingBookings(day, filteredEvents);
+    if (reserved >= selectedVehicle.totalUnits) {
+      toast({ type: "error", message: "This vehicle is fully booked on that date." });
+      return;
+    }
+
+    if (pickupDate && dropoffDate) {
+      setPickupDate(dateKey);
+      setDropoffDate(null);
+      return;
+    }
+
+    if (!pickupDate || dateKey < pickupDate) {
+      setPickupDate(dateKey);
+      setDropoffDate(null);
+      return;
+    }
+
+    if (!isRangeAvailable(pickupDate, dateKey, filteredEvents, selectedVehicle.totalUnits)) {
+      toast({
+        type: "error",
+        message: "Selected dates are not fully available for this vehicle.",
+      });
+      return;
+    }
+
+    setDropoffDate(dateKey);
+    openCreateBooking(pickupDate, dateKey);
+  }
+
+  const selectionHint = !vehicleFilter
+    ? "Select a vehicle, then click an available day for pickup and another for return."
+    : !pickupDate
+      ? "Click an available day to set pickup date."
+      : !dropoffDate
+        ? "Click an available day to set return date and open Create Booking."
+        : "Click a day to start a new selection.";
+
   return (
     <div className={cn("rounded-xl border border-border bg-card p-5 shadow-sm", className)}>
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -144,6 +254,22 @@ export default function RentalBookingCalendar({
           <p className="mt-1 text-sm text-muted-foreground">
             Rentals shown as bars across pickup and return dates.
           </p>
+          <p className="mt-2 text-sm font-medium text-primary">{selectionHint}</p>
+          {(pickupDate || dropoffDate) && (
+            <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              {pickupDate && <span>Pickup: {format(parseISO(pickupDate), "dd MMM yyyy")}</span>}
+              {dropoffDate && <span>Return: {format(parseISO(dropoffDate), "dd MMM yyyy")}</span>}
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 px-2"
+                onClick={clearDateSelection}
+              >
+                Clear dates
+              </Button>
+            </div>
+          )}
         </div>
 
         {!lockedVehicleId && (
@@ -151,7 +277,7 @@ export default function RentalBookingCalendar({
             <FilterPill
               active={!vehicleFilter}
               label="All vehicles"
-              onClick={() => setVehicleFilter(null)}
+              onClick={() => setVehicleAndClearSelection(null)}
             />
             {vehicles.map((vehicle) => (
               <FilterPill
@@ -159,7 +285,7 @@ export default function RentalBookingCalendar({
                 active={vehicleFilter === vehicle.id}
                 label={vehicle.title}
                 colorClass={EVENT_COLORS[vehicle.colorIndex % EVENT_COLORS.length]}
-                onClick={() => setVehicleFilter(vehicle.id)}
+                onClick={() => setVehicleAndClearSelection(vehicle.id)}
               />
             ))}
           </div>
@@ -211,11 +337,25 @@ export default function RentalBookingCalendar({
           weeks={weeks}
           anchor={anchor}
           events={filteredEvents}
-          onSelect={setSelected}
+          onSelectEvent={setSelected}
+          onSelectDay={handleDayClick}
+          bookingEnabled={bookingEnabled}
+          totalUnits={selectedVehicle?.totalUnits ?? 1}
+          pickupDate={pickupDate}
+          dropoffDate={dropoffDate}
         />
       )}
       {view === "week" && (
-        <WeekGrid days={weekDays} events={filteredEvents} onSelect={setSelected} />
+        <WeekGrid
+          days={weekDays}
+          events={filteredEvents}
+          onSelectEvent={setSelected}
+          onSelectDay={handleDayClick}
+          bookingEnabled={bookingEnabled}
+          totalUnits={selectedVehicle?.totalUnits ?? 1}
+          pickupDate={pickupDate}
+          dropoffDate={dropoffDate}
+        />
       )}
       {view === "list" && (
         <ListView events={filteredEvents} onSelect={setSelected} />
@@ -275,12 +415,22 @@ function MonthGrid({
   weeks,
   anchor,
   events,
-  onSelect,
+  onSelectEvent,
+  onSelectDay,
+  bookingEnabled,
+  totalUnits,
+  pickupDate,
+  dropoffDate,
 }: {
   weeks: Date[][];
   anchor: Date;
   events: BookingCalendarEvent[];
-  onSelect: (event: BookingCalendarEvent) => void;
+  onSelectEvent: (event: BookingCalendarEvent) => void;
+  onSelectDay: (date: Date) => void;
+  bookingEnabled: boolean;
+  totalUnits: number;
+  pickupDate: string | null;
+  dropoffDate: string | null;
 }) {
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-border">
@@ -302,7 +452,12 @@ function MonthGrid({
             days={week}
             anchor={anchor}
             events={events}
-            onSelect={onSelect}
+            onSelectEvent={onSelectEvent}
+            onSelectDay={onSelectDay}
+            bookingEnabled={bookingEnabled}
+            totalUnits={totalUnits}
+            pickupDate={pickupDate}
+            dropoffDate={dropoffDate}
           />
         ))}
       </div>
@@ -314,17 +469,28 @@ function WeekRow({
   days,
   anchor,
   events,
-  onSelect,
+  onSelectEvent,
+  onSelectDay,
+  bookingEnabled,
+  totalUnits,
+  pickupDate,
+  dropoffDate,
   showOutOfMonth = true,
 }: {
   days: Date[];
   anchor: Date;
   events: BookingCalendarEvent[];
-  onSelect: (event: BookingCalendarEvent) => void;
+  onSelectEvent: (event: BookingCalendarEvent) => void;
+  onSelectDay: (date: Date) => void;
+  bookingEnabled: boolean;
+  totalUnits: number;
+  pickupDate: string | null;
+  dropoffDate: string | null;
   showOutOfMonth?: boolean;
 }) {
   const weekStart = startOfDay(days[0]);
   const weekEnd = addDays(weekStart, 7);
+  const today = startOfDay(new Date());
 
   const weekEvents = events
     .map((event) => {
@@ -375,16 +541,52 @@ function WeekRow({
         {days.map((day) => {
           const inMonth = !showOutOfMonth || isSameMonth(day, anchor);
           const isToday = isSameDay(day, new Date());
+          const dateKey = format(day, "yyyy-MM-dd");
+          const reserved = countOverlappingBookings(day, events);
+          const available = reserved < totalUnits;
+          const isPast = isBefore(startOfDay(day), today);
+          const isPickup = pickupDate === dateKey;
+          const isDropoff = dropoffDate === dateKey;
+          const inRange = Boolean(
+            pickupDate && dropoffDate && dateKey >= pickupDate && dateKey <= dropoffDate
+          );
+          const clickable = bookingEnabled && inMonth && !isPast && available;
+
           return (
-            <div
+            <button
               key={day.toISOString()}
+              type="button"
+              onClick={() => {
+                if (!inMonth) return;
+                onSelectDay(day);
+              }}
               className={cn(
-                "min-h-[7.5rem] border-r border-border p-2 last:border-r-0",
+                "min-h-[7.5rem] border-r border-border p-2 text-left last:border-r-0 transition-colors",
                 !inMonth && "bg-muted/20 text-muted-foreground",
-                isToday && "bg-accent/40"
+                isToday && "bg-accent/40",
+                clickable && "cursor-pointer hover:bg-primary/5",
+                bookingEnabled && inMonth && (isPast || !available) && "cursor-not-allowed opacity-70",
+                inRange && "bg-primary/10",
+                (isPickup || isDropoff) && "ring-2 ring-inset ring-primary"
               )}
+              title={
+                !bookingEnabled
+                  ? "Select a vehicle to book"
+                  : isPast
+                    ? "Past date"
+                    : !available
+                      ? "Fully booked"
+                      : "Click to select for booking"
+              }
             >
-              <div className="flex justify-end">
+              <div className="flex items-start justify-between gap-1">
+                <span className="text-[10px] font-medium text-muted-foreground">
+                  {bookingEnabled && inMonth && !isPast
+                    ? available
+                      ? `${totalUnits - reserved}/${totalUnits}`
+                      : "Full"
+                    : ""}
+                </span>
                 <span
                   className={cn(
                     "inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-semibold",
@@ -394,7 +596,7 @@ function WeekRow({
                   {format(day, "d")}
                 </span>
               </div>
-            </div>
+            </button>
           );
         })}
       </div>
@@ -408,7 +610,10 @@ function WeekRow({
             <button
               key={`${event.id}-${startCol}`}
               type="button"
-              onClick={() => onSelect(event)}
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectEvent(event);
+              }}
               className={cn(
                 "pointer-events-auto absolute truncate rounded-md px-2 text-left text-[11px] font-semibold shadow-sm hover:opacity-90",
                 EVENT_COLORS[event.colorIndex % EVENT_COLORS.length]
@@ -434,11 +639,21 @@ function WeekRow({
 function WeekGrid({
   days,
   events,
-  onSelect,
+  onSelectEvent,
+  onSelectDay,
+  bookingEnabled,
+  totalUnits,
+  pickupDate,
+  dropoffDate,
 }: {
   days: Date[];
   events: BookingCalendarEvent[];
-  onSelect: (event: BookingCalendarEvent) => void;
+  onSelectEvent: (event: BookingCalendarEvent) => void;
+  onSelectDay: (date: Date) => void;
+  bookingEnabled: boolean;
+  totalUnits: number;
+  pickupDate: string | null;
+  dropoffDate: string | null;
 }) {
   return (
     <div className="mt-4 overflow-hidden rounded-xl border border-border">
@@ -456,7 +671,12 @@ function WeekGrid({
         days={days}
         anchor={days[3] ?? days[0]}
         events={events}
-        onSelect={onSelect}
+        onSelectEvent={onSelectEvent}
+        onSelectDay={onSelectDay}
+        bookingEnabled={bookingEnabled}
+        totalUnits={totalUnits}
+        pickupDate={pickupDate}
+        dropoffDate={dropoffDate}
         showOutOfMonth={false}
       />
     </div>

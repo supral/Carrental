@@ -1,16 +1,16 @@
 import { RentalBookingStatus, RentalPaymentStatus } from "@prisma/client";
+import {
+  getWorkflowDisplayStatus,
+  WORKFLOW_STATUS_BADGE_CLASS,
+  type WorkflowDisplayStatus,
+} from "@/lib/rentals/rental-workflow";
 
 export type RentalBookingStatusLabel = "Confirmed" | "Pending" | "Cancelled";
 
 export type RentalLifecycleStatus = "Scheduled" | "Ongoing" | "Completed" | "Cancelled";
 
 /** Status shown in UI badges and lists. */
-export type RentalDisplayStatus =
-  | "Pending"
-  | "Scheduled"
-  | "Ongoing"
-  | "Completed"
-  | "Cancelled";
+export type RentalDisplayStatus = WorkflowDisplayStatus | "Scheduled" | "Ongoing";
 
 export type RentalBookingStatusInput = {
   status: RentalBookingStatus | string;
@@ -30,7 +30,12 @@ const PENDING_DB_STATUSES = new Set<string>([
 
 const CONFIRMED_DB_STATUSES = new Set<string>([
   RentalBookingStatus.CONFIRMED,
+  RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM,
+  RentalBookingStatus.WAITING_FOR_VEHICLE_ASSIGNMENT,
+  RentalBookingStatus.READY_FOR_PICKUP,
   RentalBookingStatus.ACTIVE,
+  RentalBookingStatus.RETURNED,
+  RentalBookingStatus.AWAITING_PAYMENT,
   RentalBookingStatus.COMPLETED,
 ]);
 
@@ -60,7 +65,6 @@ export function mapRentalBookingStatusLabel(
 
 /**
  * Derives confirmation + lifecycle status from stored status and pickup/drop-off timestamps.
- * Compares full date+time instants (server `now` when called on the server).
  */
 export function getRentalBookingStatus(
   booking: RentalBookingStatusInput,
@@ -70,6 +74,17 @@ export function getRentalBookingStatus(
 
   if (bookingStatus === "Cancelled") {
     return { bookingStatus, lifecycleStatus: "Cancelled" };
+  }
+
+  if (booking.status === RentalBookingStatus.ACTIVE) {
+    return { bookingStatus, lifecycleStatus: "Ongoing" };
+  }
+  if (
+    booking.status === RentalBookingStatus.COMPLETED ||
+    booking.status === RentalBookingStatus.RETURNED ||
+    booking.status === RentalBookingStatus.AWAITING_PAYMENT
+  ) {
+    return { bookingStatus, lifecycleStatus: "Completed" };
   }
 
   const nowMs = now.getTime();
@@ -88,30 +103,22 @@ export function getRentalBookingStatus(
   return { bookingStatus, lifecycleStatus };
 }
 
-/**
- * Status to show in tables and badges:
- * Cancelled → Cancelled; unconfirmed → Pending; otherwise lifecycle (Scheduled/Ongoing/Completed).
- */
+/** Prefer explicit workflow status labels for admin / operational UIs. */
 export function getRentalBookingDisplayStatus(
   booking: RentalBookingStatusInput,
-  now: Date = new Date()
+  _now: Date = new Date()
 ): RentalDisplayStatus {
-  const { bookingStatus, lifecycleStatus } = getRentalBookingStatus(booking, now);
-  if (lifecycleStatus === "Cancelled") return "Cancelled";
-  if (bookingStatus === "Pending") return "Pending";
-  return lifecycleStatus;
+  return getWorkflowDisplayStatus(booking.status);
 }
 
-export const RENTAL_DISPLAY_STATUS_BADGE_CLASS: Record<RentalDisplayStatus, string> = {
-  Pending: "bg-yellow-100 text-yellow-800",
+export const RENTAL_DISPLAY_STATUS_BADGE_CLASS: Record<string, string> = {
+  ...WORKFLOW_STATUS_BADGE_CLASS,
   Scheduled: "bg-blue-100 text-blue-800",
   Ongoing: "bg-green-100 text-green-800",
-  Completed: "bg-gray-100 text-gray-700",
-  Cancelled: "bg-red-100 text-red-800",
 };
 
-export function getRentalDisplayStatusBadgeClass(status: RentalDisplayStatus): string {
-  return RENTAL_DISPLAY_STATUS_BADGE_CLASS[status];
+export function getRentalDisplayStatusBadgeClass(status: RentalDisplayStatus | string): string {
+  return RENTAL_DISPLAY_STATUS_BADGE_CLASS[status] ?? "bg-gray-100 text-gray-700";
 }
 
 export const RENTAL_BOOKING_STATUS_STEPS = [
@@ -136,44 +143,50 @@ export const RENTAL_BOOKING_STATUS_STEPS = [
     ) => payment === RentalPaymentStatus.PAID,
   },
   {
-    label: "Rental confirmed",
-    description: "Your rental is confirmed and ready for pickup.",
+    label: "Agreement completed",
+    description: "Your digital rental agreement has been submitted.",
     isComplete: (
       status: RentalBookingStatus,
       _payment?: RentalPaymentStatus,
       _booking?: Pick<RentalBookingStatusInput, "pickupAt" | "dropoffAt">,
       _now?: Date
     ) =>
-      status === RentalBookingStatus.CONFIRMED ||
+      status === RentalBookingStatus.WAITING_FOR_VEHICLE_ASSIGNMENT ||
+      status === RentalBookingStatus.READY_FOR_PICKUP ||
       status === RentalBookingStatus.ACTIVE ||
+      status === RentalBookingStatus.RETURNED ||
+      status === RentalBookingStatus.AWAITING_PAYMENT ||
+      status === RentalBookingStatus.COMPLETED,
+  },
+  {
+    label: "Vehicle picked up",
+    description: "Your rental is active.",
+    isComplete: (
+      status: RentalBookingStatus,
+      _payment?: RentalPaymentStatus,
+      _booking?: Pick<RentalBookingStatusInput, "pickupAt" | "dropoffAt">,
+      _now?: Date
+    ) =>
+      status === RentalBookingStatus.ACTIVE ||
+      status === RentalBookingStatus.RETURNED ||
+      status === RentalBookingStatus.AWAITING_PAYMENT ||
       status === RentalBookingStatus.COMPLETED,
   },
   {
     label: "Rental completed",
-    description: "Your rental period has ended. Thank you for choosing us.",
+    description: "Your rental has been closed. Thank you for choosing us.",
     isComplete: (
       status: RentalBookingStatus,
-      _payment: RentalPaymentStatus,
-      booking?: Pick<RentalBookingStatusInput, "pickupAt" | "dropoffAt">,
-      now: Date = new Date()
-    ) => {
-      if (status === RentalBookingStatus.COMPLETED) return true;
-      if (
-        status === RentalBookingStatus.CANCELLED ||
-        status === RentalBookingStatus.PENDING ||
-        status === RentalBookingStatus.RESERVED
-      ) {
-        return false;
-      }
-      if (!booking) return false;
-      return getRentalBookingStatus({ status, ...booking }, now).lifecycleStatus === "Completed";
-    },
+      _payment?: RentalPaymentStatus,
+      _booking?: Pick<RentalBookingStatusInput, "pickupAt" | "dropoffAt">,
+      _now?: Date
+    ) => status === RentalBookingStatus.COMPLETED,
   },
 ] as const;
 
 /** @deprecated Prefer getRentalBookingDisplayStatus for UI labels. */
 export function formatRentalBookingStatus(status: RentalBookingStatus | string): string {
-  return mapRentalBookingStatusLabel(status);
+  return getWorkflowDisplayStatus(status);
 }
 
 export function getRentalCurrentStepIndex(

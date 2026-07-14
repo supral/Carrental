@@ -159,12 +159,17 @@ export async function claimRentalBookingPayment(bookingId: string) {
       throw new RentalUnavailableError();
     }
 
+    const token = (await import("@/lib/rentals/rental-agreement-validation")).createAgreementToken();
+    const { addDays } = await import("date-fns");
+
     const confirmed = await tx.rentalBooking.update({
       where: { id: booking.id },
       data: {
         paymentStatus: RentalPaymentStatus.PAID,
-        status: RentalBookingStatus.CONFIRMED,
+        status: RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM,
         paidAt: new Date(),
+        agreementToken: token,
+        agreementTokenExpiresAt: addDays(new Date(), 30),
       },
       include: {
         vehicle: {
@@ -182,7 +187,7 @@ export async function claimRentalBookingPayment(bookingId: string) {
     await handleRentalBookingStatusChange(
       booking.id,
       previousStatus,
-      RentalBookingStatus.CONFIRMED,
+      RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM,
       tx
     );
 

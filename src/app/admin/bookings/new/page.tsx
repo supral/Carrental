@@ -17,6 +17,10 @@ export default async function AdminCreateBookingPage({
   const query = await searchParams;
   const initialVehicleId =
     typeof query.vehicleId === "string" ? query.vehicleId : undefined;
+  const initialPickupDate =
+    typeof query.pickupDate === "string" ? query.pickupDate : undefined;
+  const initialDropoffDate =
+    typeof query.dropoffDate === "string" ? query.dropoffDate : undefined;
 
   const vehicles = await listActiveRentalVehiclesForBooking();
 
@@ -34,7 +38,12 @@ export default async function AdminCreateBookingPage({
           Book a vehicle for walk-in or phone customers and check availability on the calendar.
         </p>
       </div>
-      <CreateRentalBookingForm vehicles={vehicles} initialVehicleId={initialVehicleId} />
+      <CreateRentalBookingForm
+        vehicles={vehicles}
+        initialVehicleId={initialVehicleId}
+        initialPickupDate={initialPickupDate}
+        initialDropoffDate={initialDropoffDate}
+      />
     </div>
   );
 }

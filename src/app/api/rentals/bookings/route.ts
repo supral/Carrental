@@ -74,6 +74,21 @@ export async function POST(request: NextRequest) {
         await sendRentalBookingConfirmationEmail(confirmed).catch((error) => {
           console.error("[rental-booking-email]", error);
         });
+        if (confirmed.agreementToken) {
+          const { sendRentalAgreementRequestEmail } = await import(
+            "@/lib/rentals/rental-workflow-emails"
+          );
+          await sendRentalAgreementRequestEmail({
+            id: confirmed.id,
+            customerEmail: confirmed.customerEmail,
+            customerName: confirmed.customerName,
+            pickupAt: confirmed.pickupAt,
+            dropoffAt: confirmed.dropoffAt,
+            agreementToken: confirmed.agreementToken,
+          }).catch((error) => {
+            console.error("[rental-agreement-email]", error);
+          });
+        }
 
         console.log(
           `[rental-booking] Stripe bypassed — booking ${confirmed.id} confirmed, confirmation email sent to ${confirmed.customerEmail ?? "n/a"}`

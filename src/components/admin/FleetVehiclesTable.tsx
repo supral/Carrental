@@ -89,15 +89,20 @@ export default function FleetVehiclesTable({ rows }: { rows: FleetVehicleRow[] }
         id: "actions",
         header: "",
         cell: ({ row }) => (
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="text-red-600 hover:text-red-700"
-            onClick={() => setDeleteId(row.original.id)}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center justify-end gap-1">
+            <Button asChild type="button" variant="ghost" size="sm">
+              <Link href={`/admin/fleet/${row.original.id}/history`}>History</Link>
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="text-red-600 hover:text-red-700"
+              onClick={() => setDeleteId(row.original.id)}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         ),
       },
     ],

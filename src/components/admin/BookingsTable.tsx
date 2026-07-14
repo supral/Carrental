@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
 import DataTable from "@/components/admin/DataTable";
 import { Badge } from "@/components/ui/badge";
@@ -7,9 +8,9 @@ import { format } from "date-fns";
 import { formatPrice } from "@/lib/utils";
 import type { PricedRentalOptionLine } from "@/lib/rentals/option-catalog";
 import {
-  getRentalBookingDisplayStatus,
-  getRentalDisplayStatusBadgeClass,
-} from "@/lib/rentals/rental-booking-status";
+  getWorkflowDisplayStatus,
+  WORKFLOW_STATUS_BADGE_CLASS,
+} from "@/lib/rentals/rental-workflow";
 
 export type BookingRow = {
   id: string;
@@ -38,7 +39,12 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
       header: "Vehicle",
       cell: ({ row }) => (
         <div>
-          <p className="font-medium">{row.original.vehicleName}</p>
+          <Link
+            href={`/admin/bookings/${row.original.id}`}
+            className="font-medium text-primary hover:underline"
+          >
+            {row.original.vehicleName}
+          </Link>
           <p className="text-xs text-muted-foreground">{row.original.customerName}</p>
           {(row.original.customerAddress || row.original.customerCountry) && (
             <p className="text-xs text-muted-foreground">
@@ -123,13 +129,9 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => {
-        const displayStatus = getRentalBookingDisplayStatus({
-          status: row.original.status,
-          pickupAt: row.original.pickupAt,
-          dropoffAt: row.original.dropoffAt,
-        });
+        const displayStatus = getWorkflowDisplayStatus(row.original.status);
         return (
-          <Badge className={getRentalDisplayStatusBadgeClass(displayStatus)}>{displayStatus}</Badge>
+          <Badge className={WORKFLOW_STATUS_BADGE_CLASS[displayStatus]}>{displayStatus}</Badge>
         );
       },
     },

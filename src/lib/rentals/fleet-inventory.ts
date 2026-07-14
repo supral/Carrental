@@ -23,6 +23,9 @@ export const BLOCKING_RENTAL_STATUSES: RentalBookingStatus[] = [
   RentalBookingStatus.PENDING,
   RentalBookingStatus.RESERVED,
   RentalBookingStatus.CONFIRMED,
+  RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM,
+  RentalBookingStatus.WAITING_FOR_VEHICLE_ASSIGNMENT,
+  RentalBookingStatus.READY_FOR_PICKUP,
   RentalBookingStatus.ACTIVE,
 ];
 

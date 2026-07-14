@@ -218,7 +218,26 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
     selectedOptions: input.selectedOptions ?? [],
   });
 
+  const { sendRentalBookingConfirmationEmail } = await import(
+    "@/lib/rentals/rental-booking-email"
+  );
+  const { sendRentalAgreementRequestEmail } = await import(
+    "@/lib/rentals/rental-workflow-emails"
+  );
+  await sendRentalBookingConfirmationEmail(booking).catch(() => undefined);
+  if (booking.agreementToken) {
+    await sendRentalAgreementRequestEmail({
+      id: booking.id,
+      customerEmail: booking.customerEmail,
+      customerName: booking.customerName,
+      pickupAt: booking.pickupAt,
+      dropoffAt: booking.dropoffAt,
+      agreementToken: booking.agreementToken,
+    }).catch(() => undefined);
+  }
+
   revalidatePath("/admin/bookings");
+  revalidatePath(`/admin/bookings/${booking.id}`);
   revalidatePath("/admin/calendar");
   revalidatePath("/admin/vehicles");
   revalidatePath(`/admin/vehicles/${input.vehicleId}/edit`);

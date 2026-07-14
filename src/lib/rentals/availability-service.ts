@@ -278,12 +278,18 @@ export async function createAndConfirmRentalBooking(input: CreateRentalBookingIn
       },
     });
 
+    const { createAgreementToken } = await import("@/lib/rentals/rental-agreement-validation");
+    const { addDays } = await import("date-fns");
+    const agreementToken = createAgreementToken();
+
     const confirmed = await tx.rentalBooking.update({
       where: { id: created.id },
       data: {
         paymentStatus: RentalPaymentStatus.PAID,
-        status: RentalBookingStatus.CONFIRMED,
+        status: RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM,
         paidAt: new Date(),
+        agreementToken,
+        agreementTokenExpiresAt: addDays(new Date(), 30),
       },
       include: confirmedBookingInclude,
     });
@@ -291,7 +297,7 @@ export async function createAndConfirmRentalBooking(input: CreateRentalBookingIn
     await handleRentalBookingStatusChange(
       created.id,
       RentalBookingStatus.PENDING,
-      RentalBookingStatus.CONFIRMED,
+      RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM,
       tx
     );
 

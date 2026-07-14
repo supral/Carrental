@@ -42,11 +42,15 @@ type VehicleOption = {
 interface CreateRentalBookingFormProps {
   vehicles: VehicleOption[];
   initialVehicleId?: string;
+  initialPickupDate?: string;
+  initialDropoffDate?: string;
 }
 
 export default function CreateRentalBookingForm({
   vehicles,
   initialVehicleId,
+  initialPickupDate,
+  initialDropoffDate,
 }: CreateRentalBookingFormProps) {
   const router = useRouter();
   const { toast } = useAdminToast();
@@ -59,10 +63,16 @@ export default function CreateRentalBookingForm({
   const [bookingSource, setBookingSource] = useState<"walk_in" | "phone" | "other">("walk_in");
   const [pickupAddress, setPickupAddress] = useState(DEFAULT_RENTAL_ADDRESS);
   const [dropoffAddress, setDropoffAddress] = useState(DEFAULT_RENTAL_ADDRESS);
-  const [pickupDate, setPickupDate] = useState("");
+  const [pickupDate, setPickupDate] = useState(initialPickupDate ?? "");
   const [pickupTime, setPickupTime] = useState("09:00");
-  const [dropoffDate, setDropoffDate] = useState("");
-  const [dropoffTime, setDropoffTime] = useState("09:00");
+  const [dropoffDate, setDropoffDate] = useState(initialDropoffDate ?? "");
+  const [dropoffTime, setDropoffTime] = useState(
+    initialPickupDate &&
+      initialDropoffDate &&
+      initialPickupDate === initialDropoffDate
+      ? "17:00"
+      : "09:00"
+  );
   const [vehicleOptions, setVehicleOptions] = useState<VehicleRentalOptionConfig[]>([]);
   const [selections, setSelections] = useState<RentalOptionSelections>({});
 

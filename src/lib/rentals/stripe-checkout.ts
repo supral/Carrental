@@ -10,6 +10,33 @@ import { formatRentalPriceSummary } from "@/lib/rentals/pricing";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { parsePricedRentalOptionLines } from "@/lib/rentals/option-catalog";
 import { sendRentalBookingConfirmationEmail } from "@/lib/rentals/rental-booking-email";
+import { sendRentalAgreementRequestEmail } from "@/lib/rentals/rental-workflow-emails";
+
+async function sendConfirmationAndAgreementEmails(booking: {
+  id: string;
+  customerEmail: string | null;
+  customerName: string | null;
+  pickupAt: Date;
+  dropoffAt: Date;
+  agreementToken?: string | null;
+  [key: string]: unknown;
+}) {
+  await sendRentalBookingConfirmationEmail(booking as never).catch((error) => {
+    console.error("[rental-booking-email]", error);
+  });
+  if (booking.agreementToken) {
+    await sendRentalAgreementRequestEmail({
+      id: booking.id,
+      customerEmail: booking.customerEmail,
+      customerName: booking.customerName,
+      pickupAt: booking.pickupAt,
+      dropoffAt: booking.dropoffAt,
+      agreementToken: booking.agreementToken,
+    }).catch((error) => {
+      console.error("[rental-agreement-email]", error);
+    });
+  }
+}
 
 export async function confirmRentalBookingWithoutPayment(bookingId: string) {
   const existing = await prisma.rentalBooking.findUnique({
@@ -33,9 +60,7 @@ export async function confirmRentalBookingWithoutPayment(bookingId: string) {
   }
 
   if (!wasAlreadyPaid) {
-    await sendRentalBookingConfirmationEmail(result.confirmed).catch((error) => {
-      console.error("[rental-booking-email]", error);
-    });
+    await sendConfirmationAndAgreementEmails(result.confirmed);
   }
 
   return result.confirmed;
@@ -196,9 +221,7 @@ export async function markRentalBookingPaid(sessionId: string) {
     );
   }
 
-  await sendRentalBookingConfirmationEmail(result.confirmed).catch((error) => {
-    console.error("[rental-booking-email]", error);
-  });
+  await sendConfirmationAndAgreementEmails(result.confirmed);
 
   return prisma.rentalBooking.update({
     where: { id: bookingId },

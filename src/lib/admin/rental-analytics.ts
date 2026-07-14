@@ -133,7 +133,12 @@ export async function getRentalMetricSummary(
         WHEN b.status <> 'CANCELLED'::"RentalBookingStatus"
           AND (b."paymentStatus" = 'PAID'::"RentalPaymentStatus" OR b.status IN (
             'CONFIRMED'::"RentalBookingStatus",
+            'WAITING_FOR_CUSTOMER_FORM'::"RentalBookingStatus",
+            'WAITING_FOR_VEHICLE_ASSIGNMENT'::"RentalBookingStatus",
+            'READY_FOR_PICKUP'::"RentalBookingStatus",
             'ACTIVE'::"RentalBookingStatus",
+            'RETURNED'::"RentalBookingStatus",
+            'AWAITING_PAYMENT'::"RentalBookingStatus",
             'COMPLETED'::"RentalBookingStatus"
           ))
         THEN b."totalAmountCents" ELSE 0 END), 0) AS total_revenue_cents,
@@ -153,7 +158,12 @@ export async function getRentalMetricSummary(
         WHERE b.status <> 'CANCELLED'::"RentalBookingStatus"
           AND (b."paymentStatus" = 'PAID'::"RentalPaymentStatus" OR b.status IN (
             'CONFIRMED'::"RentalBookingStatus",
+            'WAITING_FOR_CUSTOMER_FORM'::"RentalBookingStatus",
+            'WAITING_FOR_VEHICLE_ASSIGNMENT'::"RentalBookingStatus",
+            'READY_FOR_PICKUP'::"RentalBookingStatus",
             'ACTIVE'::"RentalBookingStatus",
+            'RETURNED'::"RentalBookingStatus",
+            'AWAITING_PAYMENT'::"RentalBookingStatus",
             'COMPLETED'::"RentalBookingStatus"
           ))
       )::int AS paid_bookings
