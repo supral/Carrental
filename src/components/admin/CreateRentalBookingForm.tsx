@@ -380,7 +380,7 @@ export default function CreateRentalBookingForm({
                 id="notes"
                 name="notes"
                 rows={3}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                className="w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm text-foreground shadow-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-primary"
                 placeholder="Payment collected, special requests, etc."
               />
             </div>
