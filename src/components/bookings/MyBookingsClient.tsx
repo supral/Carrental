@@ -10,6 +10,7 @@ import {
   getRentalBookingDisplayStatus,
   getRentalDisplayStatusBadgeClass,
 } from "@/lib/rentals/rental-booking-status";
+import { LoadingLabel, LoadingOverlay, PageLoader } from "@/components/ui/loading";
 
 interface SaleBookingRecord {
   id: string;
@@ -153,7 +154,8 @@ export default function MyBookingsClient() {
             Enter the email you used for car rental or purchase requests to view your status and history.
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-3 sm:flex-row">
+          <form onSubmit={handleSubmit} className="relative mt-6 flex flex-col gap-3 sm:flex-row">
+            <LoadingOverlay show={loading} label="Searching bookings..." />
             <input
               type="email"
               value={email}
@@ -167,9 +169,11 @@ export default function MyBookingsClient() {
               disabled={loading}
               className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-white hover:opacity-90 disabled:opacity-60"
             >
-              {loading ? "Searching..." : "Search"}
+              {loading ? <LoadingLabel label="Searching..." /> : "Search"}
             </button>
           </form>
+
+          {loading && searched && <PageLoader label="Finding your bookings..." className="py-8" />}
 
           {error && (
             <div className="mt-4 rounded-xl border border-primary/20 bg-accent px-4 py-3 text-sm text-accent-foreground">

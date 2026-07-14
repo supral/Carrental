@@ -12,6 +12,7 @@ import {
   getRentalDisplayStatusBadgeClass,
 } from "@/lib/rentals/rental-booking-status";
 import { RentalBookingStatus, RentalPaymentStatus } from "@prisma/client";
+import { PageLoader } from "@/components/ui/loading";
 import { cn } from "@/lib/utils";
 
 interface RentalStatus {
@@ -60,11 +61,7 @@ export default function RentalBookingStatusClient() {
   }, [bookingId, email]);
 
   if (loading) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center text-gray-600">
-        Loading your rental status...
-      </div>
-    );
+    return <PageLoader label="Loading your rental status..." />;
   }
 
   if (error || !booking) {

@@ -428,6 +428,8 @@ model FleetVehicle {
   currentFuelLevel     String?
   fuelType             String?
   transmission         String?
+  make                 String?
+  model                String?
   year                 Int?
   color                String?
   purchaseDate         DateTime?

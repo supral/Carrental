@@ -24,6 +24,7 @@ export function mapRentalSearchVehicle(
 
   return {
     id: vehicle.id,
+    title: vehicle.title || undefined,
     make: vehicle.make,
     model: vehicle.model,
     year: vehicle.year,
@@ -47,7 +48,7 @@ export function mapRentalSearchVehicle(
     image,
     images: image ? [image] : [],
     description: vehicle.description ?? "",
-    features: vehicle.features,
+    features: vehicle.features ?? [],
     featured: vehicle.featured,
     totalUnits: fleet.totalUnits,
     availableUnits: fleet.availableUnits,

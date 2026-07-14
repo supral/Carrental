@@ -3,6 +3,8 @@ import { redirect } from "next/navigation";
 import AdminBreadcrumbs from "@/components/admin/AdminBreadcrumbs";
 import CreateFleetVehicleForm from "@/components/admin/CreateFleetVehicleForm";
 import { listVehicleTypesForFleet } from "@/lib/admin/fleet-vehicle-actions";
+import { listRentalOptions } from "@/lib/admin/rental-option-actions";
+import { isSuperAdmin } from "@/lib/admin/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +17,10 @@ export default async function AdminNewFleetVehiclePage({
   if (!session) redirect("/admin/login");
 
   const params = (await searchParams) ?? {};
-  const vehicleTypes = await listVehicleTypesForFleet();
+  const [vehicleTypes, rentalOptions] = await Promise.all([
+    listVehicleTypesForFleet(),
+    listRentalOptions({ activeOnly: true }),
+  ]);
 
   return (
     <div>
@@ -28,12 +33,19 @@ export default async function AdminNewFleetVehiclePage({
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Add fleet vehicle</h1>
         <p className="text-muted-foreground">
-          Choose a vehicle type, then enter only the physical unit details.
+          Choose year and how many cars to add. Fleet Numbers (MGZS-001, MGZS-002, …) are assigned
+          automatically.
         </p>
       </div>
       <CreateFleetVehicleForm
-        vehicleTypes={vehicleTypes}
+        vehicleTypes={vehicleTypes.map((type) => ({
+          id: type.id,
+          title: type.title,
+          fleetCount: type.fleetCount,
+        }))}
+        rentalOptions={rentalOptions}
         initialVehicleId={params.vehicleId}
+        canOverrideFleetNumber={isSuperAdmin(session.user.role)}
       />
     </div>
   );

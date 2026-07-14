@@ -10,6 +10,7 @@ import {
 } from "@/lib/admin/offer-actions";
 import { useAdminToast } from "@/components/admin/AdminToastProvider";
 import { Button } from "@/components/ui/button";
+import { LoadingLabel } from "@/components/ui/loading";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -177,7 +178,7 @@ export default function BulkAssignOfferDialog({
             onClick={handleAssign}
             disabled={isPending || !selectedOfferId || vehicleCount === 0 || offers.length === 0}
           >
-            {isPending ? "Assigning..." : `Assign to all ${vehicleCount} cars`}
+            {isPending ? <LoadingLabel label="Assigning..." /> : `Assign to all ${vehicleCount} cars`}
           </Button>
           <Button variant="outline" onClick={() => handleOpen(false)} disabled={isPending}>
             Cancel

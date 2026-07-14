@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "FleetVehicle" ADD COLUMN IF NOT EXISTS "make" TEXT;
+ALTER TABLE "FleetVehicle" ADD COLUMN IF NOT EXISTS "model" TEXT;

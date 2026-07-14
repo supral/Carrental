@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
+import RentalPickupDropoffDateTimes from "@/components/car-rental/search/RentalPickupDropoffDateTimes";
 import {
   Dialog,
   DialogContent,
@@ -88,38 +88,29 @@ export default function RentalDateRangeDialog({
         </DialogHeader>
 
         <div className="space-y-5">
-          <RentalDateTimePicker
-            label="Pickup date & time *"
-            dateValue={dates.pickupDate}
-            timeValue={dates.pickupTime}
-            dateError={errors.pickupDate}
-            timeError={errors.pickupTime}
+          <RentalPickupDropoffDateTimes
+            pickupDate={dates.pickupDate}
+            pickupTime={dates.pickupTime}
+            dropoffDate={dates.dropoffDate}
+            dropoffTime={dates.dropoffTime}
             minDate={today}
-            onDateChange={(value) => {
+            pickupDateError={errors.pickupDate}
+            pickupTimeError={errors.pickupTime}
+            dropoffDateError={errors.dropoffDate}
+            dropoffTimeError={errors.dropoffTime}
+            onPickupDateChange={(value) => {
               setDates((prev) => ({ ...prev, pickupDate: value }));
               setErrors((prev) => ({ ...prev, pickupDate: undefined, pickupTime: undefined }));
             }}
-            onTimeChange={(value) => {
+            onPickupTimeChange={(value) => {
               setDates((prev) => ({ ...prev, pickupTime: value }));
               setErrors((prev) => ({ ...prev, pickupTime: undefined }));
             }}
-          />
-
-          <RentalDateTimePicker
-            label="Drop-off date & time *"
-            dateValue={dates.dropoffDate}
-            timeValue={dates.dropoffTime}
-            dateError={errors.dropoffDate}
-            timeError={errors.dropoffTime}
-            minDate={dates.pickupDate || today}
-            minTime={
-              dates.dropoffDate && dates.dropoffDate === dates.pickupDate ? dates.pickupTime : undefined
-            }
-            onDateChange={(value) => {
+            onDropoffDateChange={(value) => {
               setDates((prev) => ({ ...prev, dropoffDate: value }));
               setErrors((prev) => ({ ...prev, dropoffDate: undefined, dropoffTime: undefined }));
             }}
-            onTimeChange={(value) => {
+            onDropoffTimeChange={(value) => {
               setDates((prev) => ({ ...prev, dropoffTime: value }));
               setErrors((prev) => ({ ...prev, dropoffTime: undefined }));
             }}

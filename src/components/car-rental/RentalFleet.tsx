@@ -7,6 +7,7 @@ import { fetchVehicles } from "@/lib/api";
 import { Vehicle } from "@/types";
 import { formatPrice } from "@/lib/utils";
 import { formatVehicleName } from "@/lib/vehicles/display";
+import { PageLoader } from "@/components/ui/loading";
 
 export default function RentalFleet() {
   const [vehicles, setVehicles] = useState<Vehicle[]>([]);
@@ -20,13 +21,7 @@ export default function RentalFleet() {
   }, []);
 
   if (loading) {
-    return (
-      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-        {Array.from({ length: 4 }).map((_, index) => (
-          <div key={index} className="h-80 animate-pulse rounded-xl bg-gray-200" />
-        ))}
-      </div>
-    );
+    return <PageLoader label="Loading rental fleet..." />;
   }
 
   if (vehicles.length === 0) {

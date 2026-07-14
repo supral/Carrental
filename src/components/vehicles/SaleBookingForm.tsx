@@ -13,6 +13,7 @@ import {
 import { formatVehicleName, formatVehicleNumberLabel } from "@/lib/vehicles/display";
 import { getVehicleOfferDisplay } from "@/lib/vehicles/vehicle-offers";
 import VehicleOfferPrice from "@/components/vehicles/VehicleOfferPrice";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
 import type { Vehicle } from "@/types";
 
 interface SaleBookingFormProps {
@@ -85,7 +86,8 @@ export default function SaleBookingForm({ vehicle }: SaleBookingFormProps) {
         ← Back to vehicle details
       </Link>
 
-      <div className="mt-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+      <div className="relative mt-4 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm lg:p-8">
+        <LoadingOverlay show={loading} label="Submitting your request..." />
         <h1 className="text-3xl font-bold text-gray-900">Book This Car</h1>
         <p className="mt-2 text-gray-600">
           Submit your details and our team will contact you to arrange a viewing and complete your purchase.
@@ -210,7 +212,7 @@ export default function SaleBookingForm({ vehicle }: SaleBookingFormProps) {
             disabled={loading}
             className="w-full rounded-xl bg-red-600 px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-red-700 disabled:opacity-60"
           >
-            {loading ? "Submitting..." : "Proceed to Payment"}
+            {loading ? <LoadingLabel label="Submitting..." /> : "Proceed to Payment"}
           </button>
         </form>
       </div>

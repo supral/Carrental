@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { submitPublicRentalAgreementAction } from "@/lib/admin/rental-agreement-actions";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
 
 type DriverForm = {
   isPrimary: boolean;
@@ -104,6 +105,7 @@ export default function CustomerRentalAgreementForm({
   });
   const [error, setError] = useState("");
   const [done, setDone] = useState(Boolean(alreadyCompleted));
+  const [uploadingKey, setUploadingKey] = useState<string | null>(null);
 
   function setDriverCountSafe(count: number) {
     setDriverCount(count);
@@ -166,7 +168,13 @@ export default function CustomerRentalAgreementForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-8">
+    <form onSubmit={onSubmit} className="relative space-y-8">
+      <LoadingOverlay
+        show={pending || uploadingKey !== null}
+        label={
+          uploadingKey ? "Uploading licence..." : "Submitting rental agreement..."
+        }
+      />
       <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
         <h1 className="text-2xl font-bold tracking-tight">Digital Rental Agreement</h1>
         <p className="mt-1 text-sm text-slate-600">Vehicle: {vehicleLabel}</p>
@@ -282,15 +290,30 @@ export default function CustomerRentalAgreementForm({
               <Input
                 type="file"
                 accept="image/*,application/pdf"
+                disabled={uploadingKey !== null || pending}
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  const url = await uploadLicence(file);
-                  updateDriver(index, { licenceFrontUrl: url });
+                  const key = `${index}-front`;
+                  setUploadingKey(key);
+                  setError("");
+                  try {
+                    const url = await uploadLicence(file);
+                    updateDriver(index, { licenceFrontUrl: url });
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Licence upload failed");
+                  } finally {
+                    setUploadingKey(null);
+                  }
                 }}
                 required={!driver.licenceFrontUrl}
               />
-              {driver.licenceFrontUrl && (
+              {uploadingKey === `${index}-front` && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <LoadingLabel label="Uploading licence..." />
+                </p>
+              )}
+              {driver.licenceFrontUrl && uploadingKey !== `${index}-front` && (
                 <p className="mt-1 text-xs text-emerald-700">Uploaded</p>
               )}
             </div>
@@ -299,15 +322,32 @@ export default function CustomerRentalAgreementForm({
               <Input
                 type="file"
                 accept="image/*,application/pdf"
+                disabled={uploadingKey !== null || pending}
                 onChange={async (e) => {
                   const file = e.target.files?.[0];
                   if (!file) return;
-                  const url = await uploadLicence(file);
-                  updateDriver(index, { licenceBackUrl: url });
+                  const key = `${index}-back`;
+                  setUploadingKey(key);
+                  setError("");
+                  try {
+                    const url = await uploadLicence(file);
+                    updateDriver(index, { licenceBackUrl: url });
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Licence upload failed");
+                  } finally {
+                    setUploadingKey(null);
+                  }
                 }}
                 required={!driver.licenceBackUrl}
               />
-              {driver.licenceBackUrl && <p className="mt-1 text-xs text-emerald-700">Uploaded</p>}
+              {uploadingKey === `${index}-back` && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <LoadingLabel label="Uploading licence..." />
+                </p>
+              )}
+              {driver.licenceBackUrl && uploadingKey !== `${index}-back` && (
+                <p className="mt-1 text-xs text-emerald-700">Uploaded</p>
+              )}
             </div>
           </div>
           <SignaturePad
@@ -347,8 +387,12 @@ export default function CustomerRentalAgreementForm({
 
       {error && <p className="text-sm text-red-600">{error}</p>}
 
-      <Button type="submit" disabled={pending || !allTermsAccepted()} className="w-full sm:w-auto">
-        {pending ? "Submitting..." : "Submit Rental Agreement"}
+      <Button
+        type="submit"
+        disabled={pending || uploadingKey !== null || !allTermsAccepted()}
+        className="w-full sm:w-auto"
+      >
+        {pending ? <LoadingLabel label="Submitting..." /> : "Submit Rental Agreement"}
       </Button>
     </form>
   );

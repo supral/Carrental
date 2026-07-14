@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
+import { LoadingLabel } from "@/components/ui/loading";
 import {
   Select,
   SelectContent,
@@ -241,7 +242,7 @@ export default function VehicleImportPanel({
         </Button>
         <Button type="button" onClick={handleImport} disabled={isPending || !file}>
           <Upload className="h-4 w-4" />
-          {isPending ? "Importing..." : "Import vehicles"}
+          {isPending ? <LoadingLabel label="Importing..." /> : "Import vehicles"}
         </Button>
       </div>
 

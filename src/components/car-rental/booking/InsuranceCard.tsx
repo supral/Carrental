@@ -21,9 +21,11 @@ export default function InsuranceCard({
 }: InsuranceCardProps) {
   const description = option.description ?? "";
   const priceLabel =
-    option.price != null && option.priceType
+    option.price != null && option.priceType && option.price > 0
       ? formatOptionPriceLabel(option.price, option.priceType)
-      : "";
+      : option.price === 0
+        ? "No extra charge"
+        : "";
 
   return (
     <label
@@ -45,8 +47,15 @@ export default function InsuranceCard({
         <div className="flex flex-wrap items-start justify-between gap-2">
           <p className="font-semibold text-gray-900">{label}</p>
           {priceLabel && (
-            <span className="rounded-full bg-gray-900 px-3 py-1 text-xs font-semibold text-white">
-              +{priceLabel}
+            <span
+              className={cn(
+                "rounded-full px-3 py-1 text-xs font-semibold",
+                option.price === 0
+                  ? "bg-gray-100 text-gray-700"
+                  : "bg-gray-900 text-white"
+              )}
+            >
+              {option.price === 0 ? priceLabel : `+${priceLabel}`}
             </span>
           )}
         </div>

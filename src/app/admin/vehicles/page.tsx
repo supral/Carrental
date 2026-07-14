@@ -23,6 +23,8 @@ export default async function AdminVehiclesPage() {
         include: {
           dealer: { select: { name: true } },
           seasonOffer: true,
+          images: { take: 1, orderBy: { order: "asc" }, select: { url: true } },
+          _count: { select: { templateValues: true, customFields: true } },
         },
         orderBy: { createdAt: "desc" },
       })
@@ -49,7 +51,11 @@ export default async function AdminVehiclesPage() {
         </div>
       </div>
       <VehiclesTable
-        vehicles={vehicles}
+        vehicles={vehicles.map((vehicle) => ({
+          ...vehicle,
+          imageUrl: vehicle.images[0]?.url ?? null,
+          specCount: vehicle._count.templateValues + vehicle._count.customFields,
+        }))}
         canApprove={hasPermission(session.user.role, "vehicles:approve")}
         canManage={hasPermission(session.user.role, "vehicles:manage")}
         rentalOnly

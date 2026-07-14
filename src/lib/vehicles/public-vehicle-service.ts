@@ -27,6 +27,7 @@ export function mapDbVehicleToPublic(
 
   return {
     id: vehicle.id,
+    title: vehicle.title || undefined,
     make: vehicle.make,
     model: vehicle.model,
     year: vehicle.year,
@@ -392,6 +393,7 @@ export async function getPublicFilterOptions(listingPurpose: "sale" | "rental" =
 
 const rentalFleetSelect = {
   id: true,
+  title: true,
   make: true,
   model: true,
   year: true,
@@ -406,6 +408,7 @@ const rentalFleetSelect = {
   seats: true,
   driveType: true,
   location: true,
+  features: true,
   totalUnits: true,
   availableUnits: true,
   rentalAvailableFrom: true,
@@ -421,6 +424,7 @@ function mapRentalFleetRow(vehicle: RentalFleetRow): Vehicle {
 
   return {
     id: vehicle.id,
+    title: vehicle.title || undefined,
     make: vehicle.make,
     model: vehicle.model,
     year: vehicle.year,
@@ -441,7 +445,7 @@ function mapRentalFleetRow(vehicle: RentalFleetRow): Vehicle {
     image,
     images: image ? [image] : [],
     description: "",
-    features: [],
+    features: vehicle.features ?? [],
     totalUnits: vehicle.totalUnits ?? 1,
     availableUnits: vehicle.availableUnits ?? vehicle.totalUnits ?? 1,
     rentalAvailableFrom: vehicle.rentalAvailableFrom?.toISOString(),

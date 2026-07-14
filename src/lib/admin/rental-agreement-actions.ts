@@ -190,13 +190,80 @@ export async function getFleetVehicleHistory(fleetVehicleId: string) {
   });
 }
 
-export async function getOpsDashboardStats() {
+export type OpsDashboardBookingRow = {
+  id: string;
+  customerName: string;
+  status: string;
+  pickupAt: string;
+  dropoffAt: string;
+  vehicleLabel: string;
+  fleetLabel: string | null;
+};
+
+export type OpsDashboardStats = {
+  currentlyRented: number;
+  dueToday: number;
+  lateReturns: number;
+  pendingAgreements: number;
+  pendingPayments: number;
+  completedRentals: number;
+  leavingToday: OpsDashboardBookingRow[];
+  comingToday: OpsDashboardBookingRow[];
+};
+
+function startOfLocalDay(date = new Date()) {
+  const start = new Date(date);
+  start.setHours(0, 0, 0, 0);
+  return start;
+}
+
+function endOfLocalDay(date = new Date()) {
+  const end = new Date(date);
+  end.setHours(23, 59, 59, 999);
+  return end;
+}
+
+function mapOpsBookingRow(booking: {
+  id: string;
+  customerName: string | null;
+  status: string;
+  pickupAt: Date;
+  dropoffAt: Date;
+  vehicle: { year: number; make: string; model: string };
+  fleetVehicle: { fleetNumber: string; registrationNumber: string | null } | null;
+}): OpsDashboardBookingRow {
+  return {
+    id: booking.id,
+    customerName: booking.customerName || "Guest",
+    status: booking.status,
+    pickupAt: booking.pickupAt.toISOString(),
+    dropoffAt: booking.dropoffAt.toISOString(),
+    vehicleLabel: `${booking.vehicle.year} ${booking.vehicle.make} ${booking.vehicle.model}`,
+    fleetLabel: booking.fleetVehicle
+      ? `${booking.fleetVehicle.fleetNumber}${
+          booking.fleetVehicle.registrationNumber
+            ? ` · ${booking.fleetVehicle.registrationNumber}`
+            : ""
+        }`
+      : null,
+  };
+}
+
+export async function getOpsDashboardStats(): Promise<OpsDashboardStats> {
   await requireManage();
   const now = new Date();
-  const start = new Date(now);
-  start.setHours(0, 0, 0, 0);
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
+  const start = startOfLocalDay(now);
+  const end = endOfLocalDay(now);
+
+  const bookingSelect = {
+    id: true,
+    customerName: true,
+    status: true,
+    pickupAt: true,
+    dropoffAt: true,
+    vehicle: { select: { year: true, make: true, model: true } },
+    fleetVehicle: { select: { fleetNumber: true, registrationNumber: true } },
+  } as const;
 
   const [
     currentlyRented,
@@ -205,6 +272,8 @@ export async function getOpsDashboardStats() {
     pendingAgreements,
     pendingPayments,
     completedRentals,
+    leavingTodayRows,
+    comingTodayRows,
   ] = await Promise.all([
     prisma.rentalBooking.count({ where: { status: "ACTIVE" } }),
     prisma.rentalBooking.count({
@@ -228,6 +297,29 @@ export async function getOpsDashboardStats() {
     prisma.rentalBooking.count({
       where: { status: "COMPLETED" },
     }),
+    // Cars leaving the yard today (pickups scheduled today)
+    prisma.rentalBooking.findMany({
+      where: {
+        pickupAt: { gte: start, lte: end },
+        status: {
+          notIn: ["CANCELLED", "COMPLETED", "RETURNED", "AWAITING_PAYMENT"],
+        },
+      },
+      orderBy: { pickupAt: "asc" },
+      select: bookingSelect,
+    }),
+    // Cars coming back today (returns / dropoffs scheduled today)
+    prisma.rentalBooking.findMany({
+      where: {
+        status: { notIn: ["CANCELLED", "COMPLETED"] },
+        OR: [
+          { dropoffAt: { gte: start, lte: end } },
+          { expectedReturnAt: { gte: start, lte: end } },
+        ],
+      },
+      orderBy: { dropoffAt: "asc" },
+      select: bookingSelect,
+    }),
   ]);
 
   return {
@@ -237,5 +329,7 @@ export async function getOpsDashboardStats() {
     pendingAgreements,
     pendingPayments,
     completedRentals,
+    leavingToday: leavingTodayRows.map(mapOpsBookingRow),
+    comingToday: comingTodayRows.map(mapOpsBookingRow),
   };
 }

@@ -136,6 +136,125 @@ export async function sendOrResendAgreementRequestEmail(bookingId: string) {
   };
 }
 
+function splitCustomerName(fullName: string): { firstName: string; lastName: string } {
+  const parts = fullName.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return { firstName: "Customer", lastName: "" };
+  if (parts.length === 1) return { firstName: parts[0], lastName: "" };
+  return { firstName: parts[0], lastName: parts.slice(1).join(" ") };
+}
+
+function typedSignatureDataUrl(signatureText: string): string {
+  const escaped = signatureText
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="600" height="160"><rect width="100%" height="100%" fill="white"/><text x="32" y="98" font-family="Georgia, 'Times New Roman', serif" font-size="40" fill="#0f172a">${escaped}</text></svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString("base64")}`;
+}
+
+export type AdminAssistedAgreementInput = {
+  customerName: string;
+  customerEmail: string;
+  customerPhone: string;
+  customerAddress?: string;
+  customerDob: Date;
+  drivingLicenceNumber: string;
+  licencePhotoUrl: string;
+  licenceExpiry?: string | null;
+  signatureText: string;
+  terms: {
+    rentalTerms: true;
+    insuranceExcess: true;
+    fuelPolicy: true;
+    extraKilometres: true;
+    lateReturnCharges: true;
+    damagePolicy: true;
+  };
+};
+
+/**
+ * Admin fills agreement details for walk-in customers who cannot use the online form.
+ * Marks the booking ready for vehicle assignment.
+ */
+export async function applyAdminAssistedAgreement(
+  bookingId: string,
+  input: AdminAssistedAgreementInput
+) {
+  const booking = await prisma.rentalBooking.findUnique({
+    where: { id: bookingId },
+    select: { id: true, status: true, customerFormCompletedAt: true },
+  });
+  if (!booking) throw new Error("Booking not found");
+  if (booking.customerFormCompletedAt) return;
+
+  const previousStatus = booking.status;
+  const { firstName, lastName } = splitCustomerName(input.customerName);
+  const signatureUrl = await saveDataUrlUpload(
+    typedSignatureDataUrl(input.signatureText.trim()),
+    "signatures"
+  );
+
+  await prisma.$transaction(async (tx) => {
+    await tx.rentalDriver.deleteMany({ where: { bookingId } });
+    await tx.rentalDriver.create({
+      data: {
+        bookingId,
+        isPrimary: true,
+        sortOrder: 0,
+        firstName,
+        lastName,
+        dob: input.customerDob,
+        phone: input.customerPhone,
+        email: input.customerEmail,
+        address: input.customerAddress || null,
+        licenceNumber: input.drivingLicenceNumber,
+        licenceExpiry: input.licenceExpiry ? new Date(input.licenceExpiry) : null,
+        licenceFrontUrl: input.licencePhotoUrl,
+        licenceBackUrl: input.licencePhotoUrl,
+        signatureUrl,
+      },
+    });
+
+    await tx.rentalBooking.update({
+      where: { id: bookingId },
+      data: {
+        status: RentalBookingStatus.WAITING_FOR_VEHICLE_ASSIGNMENT,
+        customerFormCompletedAt: new Date(),
+        termsAcceptedAt: new Date(),
+        termsFlags: input.terms,
+        drivingLicenceNumber: input.drivingLicenceNumber,
+        licencePhotoUrl: input.licencePhotoUrl,
+        customerName: input.customerName,
+        customerEmail: input.customerEmail,
+        customerPhone: input.customerPhone,
+        customerAddress: input.customerAddress || null,
+        customerDob: input.customerDob,
+      },
+    });
+
+    await handleRentalBookingStatusChange(
+      bookingId,
+      previousStatus,
+      RentalBookingStatus.WAITING_FOR_VEHICLE_ASSIGNMENT,
+      tx
+    );
+  });
+
+  const dates = await prisma.rentalBooking.findUniqueOrThrow({
+    where: { id: bookingId },
+    select: { pickupAt: true, dropoffAt: true },
+  });
+
+  await sendRentalAgreementCompletedEmail({
+    id: bookingId,
+    customerEmail: input.customerEmail,
+    customerName: input.customerName,
+    pickupAt: dates.pickupAt,
+    dropoffAt: dates.dropoffAt,
+  }).catch(() => undefined);
+}
+
 export async function afterBookingConfirmedStartAgreement(bookingId: string) {
   const previous = await prisma.rentalBooking.findUnique({
     where: { id: bookingId },

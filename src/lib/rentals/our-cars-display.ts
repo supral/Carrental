@@ -9,7 +9,15 @@ const FLEET_STOCK_IMAGES = {
 } as const;
 
 function vehicleSearchText(vehicle: Vehicle): string {
-  return `${vehicle.make} ${vehicle.model}`.toLowerCase();
+  return `${vehicle.title ?? ""} ${vehicle.make} ${vehicle.model}`.toLowerCase();
+}
+
+function isPlaceholderImage(url: string): boolean {
+  return (
+    url.includes("everest-logo") ||
+    url.endsWith("/images/fleet/mg-zs.png") ||
+    Object.values(FLEET_STOCK_IMAGES).some((stock) => url === stock)
+  );
 }
 
 export function isRentalVehicleAvailable(vehicle: Vehicle): boolean {
@@ -17,6 +25,11 @@ export function isRentalVehicleAvailable(vehicle: Vehicle): boolean {
 }
 
 export function getOurCarImage(vehicle: Vehicle): string {
+  const uploaded = vehicle.images?.[0] || vehicle.image;
+  if (uploaded && !isPlaceholderImage(uploaded)) {
+    return uploaded;
+  }
+
   const text = vehicleSearchText(vehicle);
 
   if (text.includes("mg") && text.includes("zs")) {
@@ -47,7 +60,7 @@ export function getOurCarImage(vehicle: Vehicle): string {
     return FLEET_STOCK_IMAGES.haval;
   }
 
-  return FLEET_STOCK_IMAGES.mgZs;
+  return uploaded || FLEET_STOCK_IMAGES.mgZs;
 }
 
 export function getRentalCarCategory(vehicle: Vehicle): string {
@@ -59,6 +72,11 @@ export function getRentalCarCategory(vehicle: Vehicle): string {
 }
 
 export function getRentalCarTitle(vehicle: Vehicle): string {
+  const title = vehicle.title?.trim();
+  if (title) {
+    return title;
+  }
+
   const text = vehicleSearchText(vehicle);
 
   if (text.includes("mg") && text.includes("zs")) {
@@ -69,10 +87,18 @@ export function getRentalCarTitle(vehicle: Vehicle): string {
     return "Toyota Prado GX or similar SUV";
   }
 
-  return `${vehicle.make} ${vehicle.model} or similar`;
+  return `${vehicle.make} ${vehicle.model}`.trim();
 }
 
 export function getRentalLuggageCount(vehicle: Vehicle): number {
+  const fromFeatures = vehicle.features?.find((feature) =>
+    /luggage|bag|suitcase/i.test(feature)
+  );
+  if (fromFeatures) {
+    const match = fromFeatures.match(/(\d+)/);
+    if (match) return Number(match[1]);
+  }
+
   const text = vehicleSearchText(vehicle);
 
   if (text.includes("mg") && text.includes("zs")) {
@@ -83,7 +109,12 @@ export function getRentalLuggageCount(vehicle: Vehicle): number {
     return 3;
   }
 
-  if (vehicle.bodyType === "SUV" || vehicle.bodyType === "Ute" || vehicle.bodyType === "Van" || vehicle.bodyType === "Wagon") {
+  if (
+    vehicle.bodyType === "SUV" ||
+    vehicle.bodyType === "Ute" ||
+    vehicle.bodyType === "Van" ||
+    vehicle.bodyType === "Wagon"
+  ) {
     return 3;
   }
 
@@ -92,6 +123,22 @@ export function getRentalLuggageCount(vehicle: Vehicle): number {
   }
 
   return 2;
+}
+
+/** Features shown on the public rental card (managed on Vehicle Types). */
+export function getRentalCardFeatures(vehicle: Vehicle): string[] {
+  const configured = (vehicle.features ?? []).map((feature) => feature.trim()).filter(Boolean);
+  if (configured.length > 0) {
+    return configured.slice(0, 4);
+  }
+
+  const transmissionLabel = vehicle.transmission === "Automatic" ? "Automatic" : "Manual";
+  return [
+    "A/C",
+    `${vehicle.seats} passengers`,
+    `${getRentalLuggageCount(vehicle)} luggage`,
+    transmissionLabel,
+  ];
 }
 
 export function formatRentalStartingPrice(price: number): string {

@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import RentalAvailabilityCalendar from "@/components/admin/RentalAvailabilityCalendar";
 import RentalAddressInput from "@/components/car-rental/search/RentalAddressInput";
-import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
+import RentalPickupDropoffDateTimes from "@/components/car-rental/search/RentalPickupDropoffDateTimes";
 import RentalOptionsSelector from "@/components/car-rental/booking/RentalOptionsSelector";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,12 +25,18 @@ import {
 } from "@/lib/admin/rental-booking-actions";
 import {
   buildInitialRentalOptionSelections,
+  getOptionCategory,
+  hasProtectionChoiceSelected,
   rentalSelectionsToPayload,
   type RentalOptionSelections,
 } from "@/lib/rentals/rental-option-selection";
 import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
-import type { VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
+import {
+  getEnabledVehicleOptions,
+  type VehicleRentalOptionConfig,
+} from "@/lib/rentals/option-catalog";
 import { formatPrice } from "@/lib/utils";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
 
 type VehicleOption = {
   id: string;
@@ -75,11 +81,32 @@ export default function CreateRentalBookingForm({
   );
   const [vehicleOptions, setVehicleOptions] = useState<VehicleRentalOptionConfig[]>([]);
   const [selections, setSelections] = useState<RentalOptionSelections>({});
+  const [licencePhotoUrl, setLicencePhotoUrl] = useState("");
+  const [licenceUploading, setLicenceUploading] = useState(false);
+  const [terms, setTerms] = useState({
+    rentalTerms: false,
+    insuranceExcess: false,
+    fuelPolicy: false,
+    extraKilometres: false,
+    lateReturnCharges: false,
+    damagePolicy: false,
+  });
 
   const selectedVehicle = useMemo(
     () => vehicles.find((vehicle) => vehicle.id === vehicleId) ?? null,
     [vehicles, vehicleId]
   );
+
+  const insuranceOptions = useMemo(
+    () =>
+      getEnabledVehicleOptions(vehicleOptions).filter(
+        (option) => getOptionCategory(option) === "insurance"
+      ),
+    [vehicleOptions]
+  );
+
+  const protectionChosen = hasProtectionChoiceSelected(selections, insuranceOptions);
+  const [showProtectionError, setShowProtectionError] = useState(false);
 
   const today = new Date().toISOString().split("T")[0];
 
@@ -175,6 +202,13 @@ export default function CreateRentalBookingForm({
     event.preventDefault();
     setError("");
 
+    if (!protectionChosen) {
+      setShowProtectionError(true);
+      setError("Please select Standard Damage Cover or No Protection.");
+      return;
+    }
+    setShowProtectionError(false);
+
     const formData = new FormData(event.currentTarget);
     const get = (key: string) => String(formData.get(key) ?? "").trim();
 
@@ -195,6 +229,16 @@ export default function CreateRentalBookingForm({
           customerZip: get("customerZip"),
           customerDob: get("customerDob"),
           customerCountry: get("customerCountry") || "Australia",
+          drivingLicenceNumber: get("drivingLicenceNumber") || undefined,
+          licencePhotoUrl: licencePhotoUrl || undefined,
+          licenceExpiry: get("licenceExpiry") || undefined,
+          signatureText: get("signatureText") || undefined,
+          acceptRentalTerms: terms.rentalTerms,
+          acceptInsuranceExcess: terms.insuranceExcess,
+          acceptFuelPolicy: terms.fuelPolicy,
+          acceptExtraKilometres: terms.extraKilometres,
+          acceptLateReturnCharges: terms.lateReturnCharges,
+          acceptDamagePolicy: terms.damagePolicy,
           notes: get("notes") || undefined,
           bookingSource,
           selectedOptions: rentalSelectionsToPayload(selections),
@@ -202,9 +246,11 @@ export default function CreateRentalBookingForm({
 
         toast({
           type: "success",
-          message: `Booking created successfully (${formatPrice(result.totalAmountCents / 100)}).`,
+          message: result.agreementCompletedInOffice
+            ? `Booking created and agreement completed (${formatPrice(result.totalAmountCents / 100)}). Confirmation emailed.`
+            : `Booking created (${formatPrice(result.totalAmountCents / 100)}). Confirmation and agreement emails sent.`,
         });
-        router.push("/admin/bookings");
+        router.push(`/admin/bookings/${result.id}`);
         router.refresh();
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to create booking");
@@ -226,7 +272,8 @@ export default function CreateRentalBookingForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+    <form onSubmit={handleSubmit} className="relative grid gap-6 xl:grid-cols-[minmax(0,1fr)_380px]">
+      <LoadingOverlay show={isPending} label="Creating booking..." />
       <div className="space-y-6">
         <section className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-4">
           <div>
@@ -286,28 +333,22 @@ export default function CreateRentalBookingForm({
             />
           </div>
 
-          <RentalDateTimePicker
-            label="Pickup date & time *"
-            dateValue={pickupDate}
-            timeValue={pickupTime}
+          <RentalPickupDropoffDateTimes
+            pickupDate={pickupDate}
+            pickupTime={pickupTime}
+            dropoffDate={dropoffDate}
+            dropoffTime={dropoffTime}
             minDate={today}
-            onDateChange={(value) => {
+            onPickupDateChange={(value) => {
               setPickupDate(value);
               if (dropoffDate && dropoffDate < value) {
                 setDropoffDate("");
                 setDropoffTime("09:00");
               }
             }}
-            onTimeChange={setPickupTime}
-          />
-          <RentalDateTimePicker
-            label="Drop-off date & time *"
-            dateValue={dropoffDate}
-            timeValue={dropoffTime}
-            minDate={pickupDate || today}
-            minTime={dropoffDate && dropoffDate === pickupDate ? pickupTime : undefined}
-            onDateChange={setDropoffDate}
-            onTimeChange={setDropoffTime}
+            onPickupTimeChange={setPickupTime}
+            onDropoffDateChange={setDropoffDate}
+            onDropoffTimeChange={setDropoffTime}
           />
 
           {availabilityNote && (
@@ -329,18 +370,30 @@ export default function CreateRentalBookingForm({
           <RentalOptionsSelector
             vehicleOptions={vehicleOptions}
             selections={selections}
-            onSelectionsChange={setSelections}
+            onSelectionsChange={(next) => {
+              setSelections(next);
+              setShowProtectionError(false);
+            }}
+            requireProtectionChoice
+            protectionError={
+              showProtectionError
+                ? "Please select Standard Damage Cover or No Protection."
+                : undefined
+            }
           />
         </section>
 
         <section className="rounded-xl border border-border bg-card p-6 shadow-sm space-y-4">
           <div>
             <h2 className="text-lg font-semibold">Customer details</h2>
-            <p className="text-sm text-muted-foreground">Required for the booking record and confirmation.</p>
+            <p className="text-sm text-muted-foreground">
+              Required for the booking. Optionally complete the rental agreement here for walk-in
+              customers.
+            </p>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
+            <div>
               <Label htmlFor="customerName" className="mb-1.5 block">
                 Full name *
               </Label>
@@ -358,7 +411,7 @@ export default function CreateRentalBookingForm({
               </Label>
               <Input id="customerPhone" name="customerPhone" type="tel" required />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <Label htmlFor="customerAddress" className="mb-1.5 block">
                 Address *
               </Label>
@@ -376,12 +429,109 @@ export default function CreateRentalBookingForm({
               </Label>
               <Input id="customerDob" name="customerDob" type="date" required max={today} />
             </div>
-            <div className="sm:col-span-2">
+            <div>
               <Label htmlFor="customerCountry" className="mb-1.5 block">
                 Country *
               </Label>
               <Input id="customerCountry" name="customerCountry" defaultValue="Australia" required />
             </div>
+
+            <div className="sm:col-span-2 border-t border-border pt-4">
+              <h3 className="font-semibold">Rental agreement (office / walk-in)</h3>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Fill these if the customer cannot complete the online form. Leave blank to email them
+                the agreement link instead.
+              </p>
+            </div>
+
+            <div>
+              <Label htmlFor="drivingLicenceNumber" className="mb-1.5 block">
+                Licence number
+              </Label>
+              <Input id="drivingLicenceNumber" name="drivingLicenceNumber" placeholder="Licence no." />
+            </div>
+            <div>
+              <Label htmlFor="licenceExpiry" className="mb-1.5 block">
+                Licence expiry
+              </Label>
+              <Input id="licenceExpiry" name="licenceExpiry" type="date" />
+            </div>
+            <div>
+              <Label htmlFor="licencePhoto" className="mb-1.5 block">
+                Licence image
+              </Label>
+              <Input
+                id="licencePhoto"
+                type="file"
+                accept="image/*,application/pdf"
+                disabled={licenceUploading}
+                onChange={async (event) => {
+                  const file = event.target.files?.[0];
+                  if (!file) return;
+                  setLicenceUploading(true);
+                  setError("");
+                  try {
+                    const body = new FormData();
+                    body.append("file", file);
+                    const res = await fetch("/api/uploads/licence", { method: "POST", body });
+                    const json = await res.json();
+                    if (!res.ok) throw new Error(json.error || "Licence upload failed");
+                    setLicencePhotoUrl(json.url as string);
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : "Licence upload failed");
+                    setLicencePhotoUrl("");
+                  } finally {
+                    setLicenceUploading(false);
+                  }
+                }}
+              />
+              {licenceUploading && (
+                <p className="mt-1 text-xs text-muted-foreground">
+                  <LoadingLabel label="Uploading licence..." />
+                </p>
+              )}
+              {licencePhotoUrl && !licenceUploading && (
+                <p className="mt-1 text-xs text-emerald-700">Licence image uploaded</p>
+              )}
+            </div>
+            <div>
+              <Label htmlFor="signatureText" className="mb-1.5 block">
+                Signature (type full name)
+              </Label>
+              <Input
+                id="signatureText"
+                name="signatureText"
+                placeholder="Signed name"
+              />
+            </div>
+            <div className="sm:col-span-2 space-y-2 rounded-lg border border-border bg-muted/30 p-4">
+              <p className="text-sm font-medium">Rental terms</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(
+                  [
+                    ["rentalTerms", "I agree to Rental Terms"],
+                    ["insuranceExcess", "Insurance Excess"],
+                    ["fuelPolicy", "Fuel Policy"],
+                    ["extraKilometres", "Extra Kilometres"],
+                    ["lateReturnCharges", "Late Return Charges"],
+                    ["damagePolicy", "Damage Policy"],
+                  ] as const
+                ).map(([key, label]) => (
+                  <label key={key} className="flex items-start gap-3 text-sm">
+                    <input
+                      type="checkbox"
+                      className="mt-1"
+                      checked={terms[key]}
+                      onChange={(e) =>
+                        setTerms((prev) => ({ ...prev, [key]: e.target.checked }))
+                      }
+                    />
+                    <span>{label}</span>
+                  </label>
+                ))}
+              </div>
+            </div>
+
             <div className="sm:col-span-2">
               <Label htmlFor="notes" className="mb-1.5 block">
                 Notes
@@ -403,8 +553,8 @@ export default function CreateRentalBookingForm({
           <Button type="button" variant="outline" asChild>
             <Link href="/admin/bookings">Cancel</Link>
           </Button>
-          <Button type="submit" disabled={isPending || !vehicleId || !canBook}>
-            {isPending ? "Creating booking..." : "Create booking"}
+          <Button type="submit" disabled={isPending || !vehicleId || !canBook || !protectionChosen}>
+            {isPending ? <LoadingLabel label="Creating booking..." /> : "Create booking"}
           </Button>
         </div>
       </div>

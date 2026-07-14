@@ -18,6 +18,7 @@ import { validateSeasonOfferTemplate } from "@/lib/vehicles/vehicle-offers";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import ConfirmDialog from "@/components/admin/ConfirmDialog";
+import { LoadingLabel } from "@/components/ui/loading";
 import { useAdminToast } from "@/components/admin/AdminToastProvider";
 
 const defaultTemplate: OfferTemplateFormState = {
@@ -146,7 +147,13 @@ export default function AdminOffersClient({
           )}
           <div className="mt-6 flex gap-3">
             <Button onClick={handleSave} disabled={isPending}>
-              {isPending ? "Saving..." : editingId ? "Update Offer" : "Create Offer"}
+              {isPending ? (
+                <LoadingLabel label="Saving..." />
+              ) : editingId ? (
+                "Update Offer"
+              ) : (
+                "Create Offer"
+              )}
             </Button>
             <Button variant="outline" onClick={resetForm} disabled={isPending}>
               Cancel

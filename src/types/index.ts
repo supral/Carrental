@@ -11,6 +11,7 @@ import type { VehicleOfferFields } from "@/lib/vehicles/vehicle-offers";
 
 export interface Vehicle {
   id: string;
+  title?: string;
   make: string;
   model: string;
   year: number;

@@ -51,6 +51,20 @@ export const createVehicleSchema = z.object({
         path: ["vehicleNumber"],
       });
     }
+    if (!data.make?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Make is required",
+        path: ["make"],
+      });
+    }
+    if (!data.model?.trim()) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Model is required",
+        path: ["model"],
+      });
+    }
   }
 });
 
@@ -65,10 +79,22 @@ export function collectImageUrls(imageUrlsText: string | undefined, uploadedUrls
   return [...uploadedUrls, ...fromText];
 }
 
+export function listingNamePartsFromTitle(title: string): { make: string; model: string } {
+  const parts = title.trim().replace(/\s+/g, " ").split(" ").filter(Boolean);
+  if (parts.length === 0) {
+    return { make: "Rental", model: "Type" };
+  }
+  if (parts.length === 1) {
+    return { make: parts[0], model: parts[0] };
+  }
+  return { make: parts[0], model: parts.slice(1).join(" ") };
+}
+
 export function parseVehicleForm(
   values: CreateVehicleFormValues,
   uploadedUrls: string[] = [],
-  vehicleDetails?: VehicleDetailsDocument
+  vehicleDetails?: VehicleDetailsDocument,
+  options?: { features?: string[] }
 ) {
   const imageUrls = collectImageUrls(values.imageUrls, uploadedUrls);
 
@@ -78,15 +104,26 @@ export function parseVehicleForm(
 
   const details = vehicleDetails ?? { sections: [] };
   const legacy = detailsToLegacyFields(details);
+  const title = values.title.trim();
+  const fromTitle = listingNamePartsFromTitle(title);
+  const explicitFeatures = options?.features
+    ?.map((feature) => feature.trim())
+    .filter(Boolean);
 
   return {
-    title: values.title.trim(),
+    title,
     vehicleNumber:
       values.listingPurpose === ListingPurpose.SALE
         ? values.vehicleNumber!.trim().toUpperCase()
         : null,
-    make: values.make.trim(),
-    model: values.model.trim(),
+    make:
+      values.listingPurpose === ListingPurpose.RENTAL
+        ? fromTitle.make
+        : values.make.trim(),
+    model:
+      values.listingPurpose === ListingPurpose.RENTAL
+        ? fromTitle.model
+        : values.model.trim(),
     year: values.year,
     price: values.price,
     mileage: values.mileage,
@@ -103,7 +140,7 @@ export function parseVehicleForm(
     driveType: values.driveType?.trim() || null,
     location: values.location.trim(),
     description: legacy.description,
-    features: legacy.features,
+    features: explicitFeatures ?? legacy.features,
     details,
     status: values.status,
     featured: values.featured,

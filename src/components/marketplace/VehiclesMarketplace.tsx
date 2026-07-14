@@ -11,6 +11,7 @@ import FilterSidebar, { FilterValues } from "@/components/marketplace/FilterSide
 import ActiveFilterChips from "@/components/marketplace/ActiveFilterChips";
 import MarketplaceVehicleCard from "@/components/marketplace/MarketplaceVehicleCard";
 import { VehicleGridSkeleton } from "@/components/marketplace/VehicleCardSkeleton";
+import { PageLoader } from "@/components/ui/loading";
 import Pagination from "@/components/marketplace/Pagination";
 import CompareBar from "@/components/CompareBar";
 import { Button } from "@/components/ui/button";
@@ -238,7 +239,10 @@ export default function VehiclesMarketplace() {
 
             <div className="lg:col-span-3">
               {isLoading ? (
-                <VehicleGridSkeleton />
+                <div className="space-y-4">
+                  <PageLoader label="Searching vehicles..." className="py-6" />
+                  <VehicleGridSkeleton />
+                </div>
               ) : isError || !data?.data.length ? (
                 <motion.div
                   initial={{ opacity: 0 }}

@@ -35,12 +35,17 @@ export default async function FleetVehicleHistoryPage({
         ]}
       />
       <div className="mb-6">
-        <h1 className="text-2xl font-bold">
+          <h1 className="text-2xl font-bold">
           Rental History — {unit.fleetNumber}
         </h1>
         <p className="text-muted-foreground">
-          {unit.vehicle.year} {unit.vehicle.make} {unit.vehicle.model}
-          {unit.registrationNumber ? ` · ${unit.registrationNumber}` : ""}
+          Completed rentals for this physical unit.{" "}
+          <Link
+            href={`/admin/fleet/type/${unit.vehicleId}`}
+            className="text-primary hover:underline"
+          >
+            View all units of this type
+          </Link>
         </p>
       </div>
 

@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { format } from "date-fns";
 import type { RentalBookingConfirmation } from "@/lib/rentals/booking-confirmation";
 import { formatPrice } from "@/lib/utils";
+import { PageLoader } from "@/components/ui/loading";
 
 interface RentalBookingSuccessClientProps {
   initialBooking?: RentalBookingConfirmation;
@@ -53,13 +54,7 @@ export default function RentalBookingSuccessClient({
   }, [sessionId, bookingId, initialBooking, initialError]);
 
   if (loading) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-16 sm:px-6">
-        <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center shadow-sm">
-          <p className="text-gray-600">Confirming your booking...</p>
-        </div>
-      </div>
-    );
+    return <PageLoader label="Confirming your booking..." fullScreen />;
   }
 
   if (error) {

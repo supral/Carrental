@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import RentalMapPicker from "@/components/car-rental/search/RentalMapPicker";
 import RentalAddressInput from "@/components/car-rental/search/RentalAddressInput";
 import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
+import { LoadingLabel } from "@/components/ui/loading";
 import type { RentalSearchFormValues } from "@/types/rental";
 
 interface RentalSearchCardProps {
@@ -101,8 +102,14 @@ export default function RentalSearchCard({
           disabled={loading}
           className="flex w-full items-center justify-center gap-2 rounded-2xl bg-primary px-6 py-4 text-base font-semibold text-white shadow-lg shadow-primary/20 transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          <Search className="h-5 w-5" />
-          {loading ? "Searching available cars..." : "Search Available Cars"}
+          {loading ? (
+            <LoadingLabel label="Searching available cars..." />
+          ) : (
+            <>
+              <Search className="h-5 w-5" />
+              Search Available Cars
+            </>
+          )}
         </button>
       </form>
     </div>

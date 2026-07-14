@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Logo from "@/components/Logo";
 import HeroVideoBackground from "@/components/HeroVideoBackground";
+import { LoadingLabel } from "@/components/ui/loading";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -93,7 +94,7 @@ export default function AdminLoginPage() {
               </p>
             )}
             <Button type="submit" className="w-full" size="lg" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
+              {loading ? <LoadingLabel label="Signing in..." /> : "Sign In"}
             </Button>
           </form>
         </div>

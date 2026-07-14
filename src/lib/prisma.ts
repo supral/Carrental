@@ -15,7 +15,8 @@ function isStalePrismaClient(client: PrismaClient): boolean {
     delegates.vehicleType == null ||
     delegates.rentalOption == null ||
     delegates.seasonOffer == null ||
-    Prisma.VehicleScalarFieldEnum.isOnOffer == null
+    Prisma.VehicleScalarFieldEnum.isOnOffer == null ||
+    Prisma.FleetVehicleScalarFieldEnum.make == null
   );
 }
 

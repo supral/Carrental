@@ -2,8 +2,10 @@
 
 import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
+import { Pencil } from "lucide-react";
 import DataTable from "@/components/admin/DataTable";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { format } from "date-fns";
 import { formatPrice } from "@/lib/utils";
 import type { PricedRentalOptionLine } from "@/lib/rentals/option-catalog";
@@ -39,12 +41,7 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
       header: "Vehicle",
       cell: ({ row }) => (
         <div>
-          <Link
-            href={`/admin/bookings/${row.original.id}`}
-            className="font-medium text-primary hover:underline"
-          >
-            {row.original.vehicleName}
-          </Link>
+          <p className="font-medium">{row.original.vehicleName}</p>
           <p className="text-xs text-muted-foreground">{row.original.customerName}</p>
           {(row.original.customerAddress || row.original.customerCountry) && (
             <p className="text-xs text-muted-foreground">
@@ -134,6 +131,18 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
           <Badge className={WORKFLOW_STATUS_BADGE_CLASS[displayStatus]}>{displayStatus}</Badge>
         );
       },
+    },
+    {
+      id: "actions",
+      header: "Edit",
+      cell: ({ row }) => (
+        <Button asChild variant="outline" size="sm">
+          <Link href={`/admin/bookings/${row.original.id}`}>
+            <Pencil className="mr-1.5 h-3.5 w-3.5" />
+            Edit
+          </Link>
+        </Button>
+      ),
     },
   ];
 

@@ -23,6 +23,7 @@ import {
   sendAgreementEmailAction,
 } from "@/lib/admin/rental-agreement-actions";
 import { FUEL_LEVELS, calculateReturnCharges, DEFAULT_FUEL_CHARGE_CENTS, DEFAULT_EXCESS_KM_RATE_CENTS } from "@/lib/rentals/rental-charges";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
 import {
   getWorkflowDisplayStatus,
   RENTAL_WORKFLOW_TIMELINE,
@@ -203,7 +204,8 @@ export default function AdminBookingWorkflow({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="relative space-y-6">
+      <LoadingOverlay show={pending} label="Updating booking..." />
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm text-muted-foreground">Booking {booking.id}</p>
@@ -287,7 +289,7 @@ export default function AdminBookingWorkflow({
                   });
                 }}
               >
-                {pending ? "Sending..." : "Send Agreement Email"}
+                {pending ? <LoadingLabel label="Sending..." /> : "Send Agreement Email"}
               </Button>
               {agreementUrl && (
                 <div className="space-y-1">
@@ -506,7 +508,11 @@ export default function AdminBookingWorkflow({
                 });
               }}
             >
-              Complete Pickup & Generate PDF
+              {pending ? (
+                <LoadingLabel label="Completing pickup..." />
+              ) : (
+                "Complete Pickup & Generate PDF"
+              )}
             </Button>
           </section>
         )}
@@ -626,7 +632,7 @@ export default function AdminBookingWorkflow({
               });
             }}
           >
-            Return Vehicle
+            {pending ? <LoadingLabel label="Processing return..." /> : "Return Vehicle"}
           </Button>
         </section>
       )}
@@ -663,7 +669,7 @@ export default function AdminBookingWorkflow({
                   });
                 }}
               >
-                Mark Paid
+                {pending ? <LoadingLabel label="Updating..." /> : "Mark Paid"}
               </Button>
             )}
             <Button
@@ -683,7 +689,7 @@ export default function AdminBookingWorkflow({
                 });
               }}
             >
-              Complete Rental
+              {pending ? <LoadingLabel label="Completing..." /> : "Complete Rental"}
             </Button>
           </div>
         </section>

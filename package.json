@@ -10,6 +10,8 @@
     "postinstall": "prisma generate",
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
+    "db:fix-local": "powershell -ExecutionPolicy Bypass -File scripts/fix-local-db.ps1",
+    "db:verify-local": "node scripts/verify-local-fleet.js",
     "db:push": "prisma db push",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",

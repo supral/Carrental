@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, FormEvent, useEffect, useMemo } from "react";
-import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
+import RentalPickupDropoffDateTimes from "@/components/car-rental/search/RentalPickupDropoffDateTimes";
 import RentalAddressInput from "@/components/car-rental/search/RentalAddressInput";
 import RentalOptionsSelector from "@/components/car-rental/booking/RentalOptionsSelector";
 import { createRentalBookingRequest } from "@/lib/rentals/rental-api";
@@ -9,14 +9,17 @@ import { combineDateAndTime, normalizeTimeValue } from "@/lib/rentals/search-val
 import { calculateBookingPrice } from "@/lib/rentals/price-calculator";
 import {
   buildInitialRentalOptionSelections,
+  getOptionCategory,
+  hasProtectionChoiceSelected,
   rentalSelectionsToPayload,
 } from "@/lib/rentals/rental-option-selection";
 import { getEnabledVehicleOptions, type VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
 import { DEFAULT_RENTAL_ADDRESS } from "@/lib/rentals/locations";
-import { Vehicle } from "@/types";
-import type { RentalBookingContext } from "@/types/rental";
 import { formatPrice } from "@/lib/utils";
 import { formatVehicleName } from "@/lib/vehicles/display";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
+import { Vehicle } from "@/types";
+import type { RentalBookingContext } from "@/types/rental";
 
 interface RentalBookingFormProps {
   vehicle: Vehicle;
@@ -123,6 +126,13 @@ export default function RentalBookingForm({
         throw new Error("Please complete pickup and drop-off details.");
       }
 
+      const insuranceOptions = getEnabledVehicleOptions(vehicleOptions).filter(
+        (option) => getOptionCategory(option) === "insurance"
+      );
+      if (!hasProtectionChoiceSelected(selections, insuranceOptions)) {
+        throw new Error("Please select Standard Damage Cover or No Protection.");
+      }
+
       const pickupAt = combineDateAndTime(tripDetails.pickupDate, tripDetails.pickupTime);
       const dropoffAt = combineDateAndTime(tripDetails.dropoffDate, tripDetails.dropoffTime);
 
@@ -186,7 +196,8 @@ export default function RentalBookingForm({
         )}
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-4">
+      <form onSubmit={handleSubmit} className="relative space-y-4">
+          <LoadingOverlay show={loading} label="Processing your booking..." />
         <input type="hidden" name="vehicle" value={vehicleTitle} />
 
         <section className="rounded-lg border border-gray-200 bg-gray-50 p-4 sm:p-5">
@@ -206,26 +217,16 @@ export default function RentalBookingForm({
               onChange={(value) => updateTripField("dropoffAddress", value)}
               required
             />
-            <RentalDateTimePicker
-              label="Pickup date & time *"
-              dateValue={tripDetails.pickupDate}
-              timeValue={tripDetails.pickupTime}
+            <RentalPickupDropoffDateTimes
+              pickupDate={tripDetails.pickupDate}
+              pickupTime={tripDetails.pickupTime}
+              dropoffDate={tripDetails.dropoffDate}
+              dropoffTime={tripDetails.dropoffTime}
               minDate={today}
-              onDateChange={(value) => updateTripField("pickupDate", value)}
-              onTimeChange={(value) => updateTripField("pickupTime", value)}
-            />
-            <RentalDateTimePicker
-              label="Drop-off date & time *"
-              dateValue={tripDetails.dropoffDate}
-              timeValue={tripDetails.dropoffTime}
-              minDate={tripDetails.pickupDate || today}
-              minTime={
-                tripDetails.dropoffDate && tripDetails.dropoffDate === tripDetails.pickupDate
-                  ? tripDetails.pickupTime
-                  : undefined
-              }
-              onDateChange={(value) => updateTripField("dropoffDate", value)}
-              onTimeChange={(value) => updateTripField("dropoffTime", value)}
+              onPickupDateChange={(value) => updateTripField("pickupDate", value)}
+              onPickupTimeChange={(value) => updateTripField("pickupTime", value)}
+              onDropoffDateChange={(value) => updateTripField("dropoffDate", value)}
+              onDropoffTimeChange={(value) => updateTripField("dropoffTime", value)}
             />
           </div>
         </section>
@@ -361,7 +362,13 @@ export default function RentalBookingForm({
           disabled={loading || !tripReady}
           className="w-full rounded-lg bg-primary px-6 py-3.5 text-base font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
         >
-          {loading ? "Processing..." : rentalQuote ? `Confirm Booking · ${formatPrice(rentalQuote.total)}` : "Confirm Booking"}
+          {loading ? (
+            <LoadingLabel label="Processing booking..." />
+          ) : rentalQuote ? (
+            `Confirm Booking · ${formatPrice(rentalQuote.total)}`
+          ) : (
+            "Confirm Booking"
+          )}
         </button>
 
         <p className="text-center text-xs text-gray-500">

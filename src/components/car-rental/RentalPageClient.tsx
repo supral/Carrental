@@ -20,6 +20,7 @@ import { searchRentalVehiclesAction } from "@/lib/rentals/search-actions";
 import { toRentalSearchRequest, validateRentalSearchForm } from "@/lib/rentals/search-validation";
 import { videoPanel } from "@/lib/video-page-styles";
 import { cn } from "@/lib/utils";
+import { PageLoader } from "@/components/ui/loading";
 import type {
   RentalBookingContext,
   RentalResultFilters,
@@ -179,7 +180,7 @@ export default function RentalPageClient({ hero, fleetVehicles }: RentalPageClie
             >
               {showLoading && (
                 <div className={cn(videoPanel, "border-gray-200 bg-white")}>
-                  <p className="mb-6 text-center text-sm font-medium text-gray-600">Searching available cars...</p>
+                  <PageLoader label="Searching available cars..." className="py-6" />
                   <RentalResultsSkeleton />
                 </div>
               )}

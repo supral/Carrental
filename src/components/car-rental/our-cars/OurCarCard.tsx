@@ -1,14 +1,15 @@
 "use client";
 
 import Image from "next/image";
-import { Briefcase, Cog, Snowflake, Users } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import { Briefcase, Check, Cog, Snowflake, Users } from "lucide-react";
 import type { Vehicle } from "@/types";
 import {
   formatRentalStartingPrice,
   getOurCarImage,
   getRentalCarCategory,
   getRentalCarTitle,
-  getRentalLuggageCount,
+  getRentalCardFeatures,
 } from "@/lib/rentals/our-cars-display";
 import { cn } from "@/lib/utils";
 
@@ -19,12 +20,20 @@ interface OurCarCardProps {
   priority?: boolean;
 }
 
+function featureIcon(label: string): LucideIcon {
+  const text = label.toLowerCase();
+  if (/a\/?c|air\s*condition|climate/.test(text)) return Snowflake;
+  if (/passenger|seat|people|person/.test(text)) return Users;
+  if (/luggage|bag|suitcase|boot/.test(text)) return Briefcase;
+  if (/automatic|manual|transmission|gear/.test(text)) return Cog;
+  return Check;
+}
+
 export default function OurCarCard({ vehicle, onContinue, className, priority = false }: OurCarCardProps) {
   const title = getRentalCarTitle(vehicle);
   const category = getRentalCarCategory(vehicle);
-  const luggage = getRentalLuggageCount(vehicle);
   const imageSrc = getOurCarImage(vehicle);
-  const transmissionLabel = vehicle.transmission === "Automatic" ? "Automatic" : "Manual";
+  const features = getRentalCardFeatures(vehicle);
 
   return (
     <article
@@ -64,22 +73,15 @@ export default function OurCarCard({ vehicle, onContinue, className, priority = 
         </button>
 
         <div className="mt-5 grid flex-1 grid-cols-2 gap-x-4 gap-y-3 border-t border-gray-100 pt-5 text-xs leading-snug text-gray-500">
-          <span className="flex items-start gap-2">
-            <Snowflake className="mt-0.5 h-4 w-4 shrink-0" />
-            A/C
-          </span>
-          <span className="flex items-start gap-2">
-            <Users className="mt-0.5 h-4 w-4 shrink-0" />
-            {vehicle.seats} passengers
-          </span>
-          <span className="flex items-start gap-2">
-            <Briefcase className="mt-0.5 h-4 w-4 shrink-0" />
-            {luggage} luggage
-          </span>
-          <span className="flex items-start gap-2">
-            <Cog className="mt-0.5 h-4 w-4 shrink-0" />
-            {transmissionLabel}
-          </span>
+          {features.map((feature) => {
+            const Icon = featureIcon(feature);
+            return (
+              <span key={feature} className="flex items-start gap-2">
+                <Icon className="mt-0.5 h-4 w-4 shrink-0" />
+                {feature}
+              </span>
+            );
+          })}
         </div>
       </div>
     </article>

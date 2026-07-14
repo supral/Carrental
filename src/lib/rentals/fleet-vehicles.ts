@@ -24,9 +24,164 @@ const BLOCKING_ASSIGNMENT_STATUSES: RentalBookingStatus[] = [
 ];
 
 export function buildDefaultFleetNumber(make: string, model: string, sequence: number): string {
-  const makePart = make.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase() || "CAR";
-  const modelPart = model.replace(/[^A-Za-z0-9]/g, "").slice(0, 3).toUpperCase() || "X";
-  return `${makePart}${modelPart}-${String(sequence).padStart(3, "0")}`;
+  const prefix = buildFleetNumberPrefix({ make, model });
+  return `${prefix}-${String(sequence).padStart(3, "0")}`;
+}
+
+/** Compact unique prefix used in Fleet Numbers, e.g. MGZS, PRADO, TOYOTA. */
+export function buildFleetNumberPrefix(input: {
+  make?: string | null;
+  model?: string | null;
+  title?: string | null;
+}): string {
+  const clean = (value: string | null | undefined) =>
+    (value ?? "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+
+  const make = clean(input.make);
+  const model = clean(input.model);
+  const title = clean(input.title);
+
+  const usableMake = make && make !== "RENTAL" ? make : "";
+  const usableModel = model && model !== "TYPE" ? model : "";
+
+  if (usableModel.length >= 4) {
+    return usableModel.slice(0, 8);
+  }
+  if (usableModel.length >= 1 && usableMake.length >= 1) {
+    return `${usableMake.slice(0, 3)}${usableModel}`.slice(0, 8);
+  }
+  if (usableMake.length >= 2) {
+    return usableMake.slice(0, 6);
+  }
+  if (title.length >= 2) {
+    return title.slice(0, 6);
+  }
+  return "FLEET";
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Next Fleet Number for a vehicle type: PREFIX-001, PREFIX-002, …
+ * Increments past the highest existing suffix for that type's prefix.
+ * Never reuses numbers from deleted units that still hold the high-water mark —
+ * we only scan remaining rows; deleted suffixes can leave gaps by design.
+ */
+export async function allocateNextFleetNumber(
+  vehicleId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<string> {
+  const vehicle = await client.vehicle.findUnique({
+    where: { id: vehicleId },
+    select: { make: true, model: true, title: true },
+  });
+  if (!vehicle) throw new Error("Vehicle type not found");
+
+  const prefix = buildFleetNumberPrefix(vehicle);
+  const existing = await client.fleetVehicle.findMany({
+    where: { vehicleId },
+    select: { fleetNumber: true },
+  });
+
+  const pattern = new RegExp(`^${escapeRegExp(prefix)}-(\\d+)$`, "i");
+  let maxSeq = 0;
+  for (const row of existing) {
+    const match = row.fleetNumber.match(pattern);
+    if (match) {
+      maxSeq = Math.max(maxSeq, Number.parseInt(match[1], 10));
+    }
+  }
+
+  let next = maxSeq + 1;
+  let candidate = `${prefix}-${String(next).padStart(3, "0")}`;
+  while (await client.fleetVehicle.findUnique({ where: { fleetNumber: candidate } })) {
+    next += 1;
+    candidate = `${prefix}-${String(next).padStart(3, "0")}`;
+  }
+  return candidate;
+}
+
+export type FleetTypeStatusCounts = {
+  fleetSize: number;
+  available: number;
+  rented: number;
+  reserved: number;
+  maintenance: number;
+  inactive: number;
+};
+
+/** Live status totals for one vehicle type — never stored as DB columns. */
+export async function getFleetTypeStatusCounts(
+  vehicleId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<FleetTypeStatusCounts> {
+  const rows = await client.fleetVehicle.groupBy({
+    by: ["status"],
+    where: { vehicleId },
+    _count: { _all: true },
+  });
+
+  const counts: FleetTypeStatusCounts = {
+    fleetSize: 0,
+    available: 0,
+    rented: 0,
+    reserved: 0,
+    maintenance: 0,
+    inactive: 0,
+  };
+
+  for (const row of rows) {
+    const n = row._count._all;
+    counts.fleetSize += n;
+    if (row.status === FleetVehicleStatus.AVAILABLE) counts.available = n;
+    if (row.status === FleetVehicleStatus.RENTED) counts.rented = n;
+    if (row.status === FleetVehicleStatus.RESERVED) counts.reserved = n;
+    if (row.status === FleetVehicleStatus.MAINTENANCE) counts.maintenance = n;
+    if (row.status === FleetVehicleStatus.INACTIVE) counts.inactive = n;
+  }
+
+  return counts;
+}
+
+/** Batch status counts for many vehicle types. */
+export async function getFleetTypeStatusCountsBatch(
+  vehicleIds: string[],
+  client: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<Map<string, FleetTypeStatusCounts>> {
+  const map = new Map<string, FleetTypeStatusCounts>();
+  for (const id of vehicleIds) {
+    map.set(id, {
+      fleetSize: 0,
+      available: 0,
+      rented: 0,
+      reserved: 0,
+      maintenance: 0,
+      inactive: 0,
+    });
+  }
+  if (vehicleIds.length === 0) return map;
+
+  const rows = await client.fleetVehicle.groupBy({
+    by: ["vehicleId", "status"],
+    where: { vehicleId: { in: vehicleIds } },
+    _count: { _all: true },
+  });
+
+  for (const row of rows) {
+    const entry = map.get(row.vehicleId);
+    if (!entry) continue;
+    const n = row._count._all;
+    entry.fleetSize += n;
+    if (row.status === FleetVehicleStatus.AVAILABLE) entry.available = n;
+    if (row.status === FleetVehicleStatus.RENTED) entry.rented = n;
+    if (row.status === FleetVehicleStatus.RESERVED) entry.reserved = n;
+    if (row.status === FleetVehicleStatus.MAINTENANCE) entry.maintenance = n;
+    if (row.status === FleetVehicleStatus.INACTIVE) entry.inactive = n;
+  }
+
+  return map;
 }
 
 /** Count bookable physical units for a vehicle type (excludes maintenance / inactive). */
@@ -78,16 +233,8 @@ export async function ensureFleetUnitsForVehicle(
 
   if (bookable.length < target) {
     const toCreate = target - bookable.length;
-    const startSeq = existing.length + 1;
     for (let i = 0; i < toCreate; i++) {
-      const sequence = startSeq + i;
-      let fleetNumber = buildDefaultFleetNumber(vehicle.make, vehicle.model, sequence);
-      // Avoid unique collisions
-      let attempt = 0;
-      while (await client.fleetVehicle.findUnique({ where: { fleetNumber } })) {
-        attempt += 1;
-        fleetNumber = buildDefaultFleetNumber(vehicle.make, vehicle.model, sequence + attempt * 100);
-      }
+      const fleetNumber = await allocateNextFleetNumber(vehicleId, client);
       await client.fleetVehicle.create({
         data: {
           vehicleId,
@@ -217,7 +364,11 @@ export async function releaseFleetVehicleFromBooking(
 
 export type CreateFleetVehicleInput = {
   vehicleId: string;
-  fleetNumber: string;
+  /** Optional override — normally auto-allocated. */
+  fleetNumber?: string;
+  make?: string;
+  model?: string;
+  year?: number | null;
   registrationNumber?: string;
   vinNumber?: string;
   engineNumber?: string;
@@ -231,17 +382,29 @@ export type CreateFleetVehicleInput = {
 };
 
 export async function createFleetVehicleRecord(input: CreateFleetVehicleInput) {
-  const fleetNumber = input.fleetNumber.trim().toUpperCase();
+  const fleetNumber = input.fleetNumber?.trim()
+    ? input.fleetNumber.trim().toUpperCase()
+    : await allocateNextFleetNumber(input.vehicleId);
+
   if (!fleetNumber) throw new Error("Fleet number is required");
+
+  const duplicate = await prisma.fleetVehicle.findUnique({ where: { fleetNumber } });
+  if (duplicate) {
+    throw new Error(`Fleet number ${fleetNumber} is already in use`);
+  }
 
   const created = await prisma.fleetVehicle.create({
     data: {
       vehicleId: input.vehicleId,
       fleetNumber,
+      make: input.make?.trim() || null,
+      model: input.model?.trim() || null,
+      year: input.year ?? null,
       registrationNumber: input.registrationNumber?.trim() || null,
       vinNumber: input.vinNumber?.trim() || null,
       engineNumber: input.engineNumber?.trim() || null,
       odometer: input.odometer ?? null,
+      currentKm: input.odometer ?? null,
       color: input.color?.trim() || null,
       purchaseDate: input.purchaseDate ?? null,
       purchaseCostCents: input.purchaseCostCents ?? null,
@@ -268,6 +431,9 @@ export async function updateFleetVehicleRecord(
       ...(input.fleetNumber !== undefined
         ? { fleetNumber: input.fleetNumber.trim().toUpperCase() }
         : {}),
+      ...(input.make !== undefined ? { make: input.make.trim() || null } : {}),
+      ...(input.model !== undefined ? { model: input.model.trim() || null } : {}),
+      ...(input.year !== undefined ? { year: input.year } : {}),
       ...(input.registrationNumber !== undefined
         ? { registrationNumber: input.registrationNumber.trim() || null }
         : {}),
@@ -275,7 +441,9 @@ export async function updateFleetVehicleRecord(
       ...(input.engineNumber !== undefined
         ? { engineNumber: input.engineNumber.trim() || null }
         : {}),
-      ...(input.odometer !== undefined ? { odometer: input.odometer } : {}),
+      ...(input.odometer !== undefined
+        ? { odometer: input.odometer, currentKm: input.odometer }
+        : {}),
       ...(input.color !== undefined ? { color: input.color.trim() || null } : {}),
       ...(input.purchaseDate !== undefined ? { purchaseDate: input.purchaseDate } : {}),
       ...(input.purchaseCostCents !== undefined

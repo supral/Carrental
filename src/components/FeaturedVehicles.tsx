@@ -8,6 +8,7 @@ import { fetchFeaturedVehicles } from "@/lib/api";
 import { getFeaturedVehicles } from "@/data/vehicles";
 import { Vehicle } from "@/types";
 import { cn } from "@/lib/utils";
+import { PageLoader } from "@/components/ui/loading";
 
 type FeaturedTab = "sale" | "rental";
 
@@ -73,11 +74,14 @@ export default function FeaturedVehicles() {
         </div>
 
         {loading ? (
-          <div className="mt-10 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {Array.from({ length: 4 }).map((_, i) => (
-              <div key={i} className="bg-gray-200 rounded-xl aspect-[4/5] animate-pulse" />
-            ))}
-          </div>
+          <PageLoader
+            label={
+              activeTab === "rental"
+                ? "Loading featured rentals..."
+                : "Loading featured vehicles..."
+            }
+            className="mt-10"
+          />
         ) : vehicles.length === 0 ? (
           <div className="mt-10 rounded-xl border border-gray-200 bg-white px-6 py-12 text-center text-gray-600">
             No featured {activeTab === "rental" ? "rental" : "sale"} vehicles right now.

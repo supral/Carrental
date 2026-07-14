@@ -12,6 +12,7 @@ import {
 } from "@/lib/admin/offer-actions";
 import { formatPrice } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { LoadingLabel } from "@/components/ui/loading";
 import { Label } from "@/components/ui/label";
 import {
   Dialog,
@@ -272,11 +273,15 @@ export default function AssignVehicleOfferDialog({
           )}
           {mode === "assign" ? (
             <Button onClick={handleAssign} disabled={isPending || !selectedOfferId}>
-              {isPending ? "Saving..." : "Assign offer"}
+              {isPending ? <LoadingLabel label="Saving..." /> : "Assign offer"}
             </Button>
           ) : (
             <Button onClick={handleCreate} disabled={isPending}>
-              {isPending ? "Creating..." : "Create & assign to this vehicle"}
+              {isPending ? (
+                <LoadingLabel label="Creating..." />
+              ) : (
+                "Create & assign to this vehicle"
+              )}
             </Button>
           )}
         </div>

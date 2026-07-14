@@ -12,6 +12,7 @@ import {
 } from "@/lib/sales/sale-booking-status";
 import { SaleBookingStatus } from "@prisma/client";
 import ContactPhoneTrigger from "@/components/contact/ContactPhoneTrigger";
+import { PageLoader } from "@/components/ui/loading";
 import { cn } from "@/lib/utils";
 
 interface BookingStatus {
@@ -62,11 +63,7 @@ export default function SaleBookingStatusClient() {
   }, [bookingId, email]);
 
   if (loading) {
-    return (
-      <div className="mx-auto max-w-2xl px-4 py-16 text-center text-gray-600">
-        Loading your request status...
-      </div>
-    );
+    return <PageLoader label="Loading your request status..." fullScreen />;
   }
 
   if (error || !booking) {

@@ -2,6 +2,7 @@
 
 import { useState, FormEvent } from "react";
 import { submitForm } from "@/lib/api";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
 
 export default function CarRentalGeneralForm({ className = "" }: { className?: string }) {
   const [submitted, setSubmitted] = useState(false);
@@ -50,7 +51,8 @@ export default function CarRentalGeneralForm({ className = "" }: { className?: s
     "w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20";
 
   return (
-    <form onSubmit={handleSubmit} className={`space-y-4 ${className}`}>
+    <form onSubmit={handleSubmit} className={`relative space-y-4 ${className}`}>
+      <LoadingOverlay show={loading} label="Sending your enquiry..." />
       <div>
         <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">Full Name *</label>
         <input id="name" name="name" type="text" required placeholder="John Smith" className={inputClass} />
@@ -91,7 +93,7 @@ export default function CarRentalGeneralForm({ className = "" }: { className?: s
       </div>
       {error && <div className="rounded-lg border border-primary/20 bg-accent px-4 py-3 text-sm text-accent-foreground">{error}</div>}
       <button type="submit" disabled={loading} className="w-full rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white hover:opacity-90 disabled:opacity-60">
-        {loading ? "Sending..." : "Submit Enquiry"}
+        {loading ? <LoadingLabel label="Sending..." /> : "Submit Enquiry"}
       </button>
     </form>
   );

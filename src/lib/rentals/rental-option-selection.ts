@@ -7,6 +7,9 @@ import {
 
 export type RentalOptionSelections = Record<string, { selected: boolean; quantity: number }>;
 
+/** Synthetic protection choice — not a chargeable DB option. */
+export const NO_PROTECTION_OPTION_TYPE = "noProtection";
+
 export function getOptionCategory(option: VehicleRentalOptionConfig): RentalOptionCategory {
   if (option.category) return option.category;
   const catalog = RENTAL_OPTION_CATALOG_MAP[option.type as keyof typeof RENTAL_OPTION_CATALOG_MAP];
@@ -28,7 +31,9 @@ export function optionSupportsQuantity(option: VehicleRentalOptionConfig): boole
 export function buildInitialRentalOptionSelections(
   options: VehicleRentalOptionConfig[]
 ): RentalOptionSelections {
-  const state: RentalOptionSelections = {};
+  const state: RentalOptionSelections = {
+    [NO_PROTECTION_OPTION_TYPE]: { selected: false, quantity: 1 },
+  };
   for (const option of options) {
     state[String(option.type)] = {
       selected: false,
@@ -42,9 +47,18 @@ export function rentalSelectionsToPayload(
   selections: RentalOptionSelections
 ): SelectedRentalOptionInput[] {
   return Object.entries(selections)
-    .filter(([, value]) => value.selected)
+    .filter(([type, value]) => value.selected && type !== NO_PROTECTION_OPTION_TYPE)
     .map(([type, value]) => ({
       type,
       quantity: value.quantity,
     }));
+}
+
+/** True when Standard Damage Cover (or other insurance) OR No Protection is selected. */
+export function hasProtectionChoiceSelected(
+  selections: RentalOptionSelections,
+  insuranceOptions: VehicleRentalOptionConfig[]
+): boolean {
+  if (selections[NO_PROTECTION_OPTION_TYPE]?.selected) return true;
+  return insuranceOptions.some((option) => selections[String(option.type)]?.selected);
 }

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { submitForm } from "@/lib/api";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
 
 export default function AutoCareScheduleForm() {
   const [submitted, setSubmitted] = useState(false);
@@ -58,7 +59,8 @@ export default function AutoCareScheduleForm() {
     "w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-red-600 focus:ring-2 focus:ring-red-600/20";
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form onSubmit={handleSubmit} className="relative space-y-4">
+      <LoadingOverlay show={loading} label="Sending your request..." />
       <div>
         <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">
           Name <span className="text-red-600">*</span>
@@ -148,7 +150,7 @@ export default function AutoCareScheduleForm() {
         disabled={loading}
         className="w-full rounded-lg bg-red-600 px-6 py-3.5 text-base font-semibold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {loading ? "Sending..." : "Schedule Service"}
+        {loading ? <LoadingLabel label="Sending..." /> : "Schedule Service"}
       </button>
 
       <p className="text-center text-xs leading-relaxed text-gray-500">

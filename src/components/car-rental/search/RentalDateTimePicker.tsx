@@ -117,21 +117,21 @@ export default function RentalDateTimePicker({
   };
 
   const dateField = (
-        <div>
-          <span className="mb-1 block text-xs text-gray-500">Date</span>
-          <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
-            <PopoverTrigger asChild>
-              <button
-                type="button"
-                className={fieldButtonClass(!!dateError)}
-                aria-label={`Choose ${label} date`}
-              >
-                <Calendar className="h-4 w-4 shrink-0 text-primary" />
-                <span className={cn("truncate", dateValue ? "text-gray-900" : "text-gray-500")}>
-                  {dateValue ? formatRentalDateLabel(dateValue) : "Choose date"}
-                </span>
-              </button>
-            </PopoverTrigger>
+    <div className="min-w-0">
+      <span className="mb-1 block text-xs text-gray-500">Date</span>
+      <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            className={fieldButtonClass(!!dateError)}
+            aria-label={`Choose ${label} date`}
+          >
+            <Calendar className="h-4 w-4 shrink-0 text-primary" />
+            <span className={cn("truncate", dateValue ? "text-gray-900" : "text-gray-500")}>
+              {dateValue ? formatRentalDateLabel(dateValue) : "Choose date"}
+            </span>
+          </button>
+        </PopoverTrigger>
             <PopoverContent
               side="bottom"
               align="start"
@@ -199,31 +199,33 @@ export default function RentalDateTimePicker({
   );
 
   const timeField = (
-        <div>
-          <span className="mb-1 block text-xs text-gray-500">Time</span>
-          <Select
-            value={timeValue || undefined}
-            onValueChange={onTimeChange}
-            disabled={!dateValue}
-          >
-            <SelectTrigger
-              className={cn(
-                "h-12 rounded-xl",
-                timeError ? "border-destructive" : "border-gray-300"
-              )}
-            >
-              <SelectValue placeholder={dateValue ? "Choose time" : "Pick date first"} />
-            </SelectTrigger>
-            <SelectContent className="max-h-56">
-              {timeSlots.map((slot) => (
-                <SelectItem key={slot} value={slot}>
-                  {formatTimeLabel(slot)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {timeError && <p className="mt-1 text-xs text-primary">{timeError}</p>}
-        </div>
+    <div className="min-w-0">
+      <span className="mb-1 block text-xs text-gray-500">Time</span>
+      <Select
+        value={dateValue ? timeValue || undefined : undefined}
+        onValueChange={onTimeChange}
+        disabled={!dateValue}
+      >
+        <SelectTrigger
+          className={cn(
+            "h-12 w-full min-w-[6.5rem] rounded-xl border bg-white text-sm text-gray-900 shadow-sm",
+            "disabled:cursor-not-allowed disabled:bg-gray-50 disabled:opacity-100",
+            "data-[placeholder]:text-gray-500",
+            timeError ? "border-destructive" : "border-slate-300"
+          )}
+        >
+          <SelectValue placeholder={dateValue ? "Choose time" : "Pick date first"} />
+        </SelectTrigger>
+        <SelectContent className="max-h-56 bg-white text-gray-900">
+          {timeSlots.map((slot) => (
+            <SelectItem key={slot} value={slot}>
+              {formatTimeLabel(slot)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      {timeError && <p className="mt-1 text-xs text-primary">{timeError}</p>}
+    </div>
   );
 
   if (inline) {
@@ -236,10 +238,10 @@ export default function RentalDateTimePicker({
   }
 
   return (
-    <div className={className}>
+    <div className={cn("min-w-0", className)}>
       <span className="mb-1.5 block text-sm font-medium text-gray-800">{label}</span>
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1.2fr_1fr]">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(6.5rem,1fr)]">
         {dateField}
         {timeField}
       </div>

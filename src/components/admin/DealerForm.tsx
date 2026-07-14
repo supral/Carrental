@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { LoadingLabel } from "@/components/ui/loading";
 import {
   Select,
   SelectContent,
@@ -244,7 +245,13 @@ export default function DealerForm({
 
       <div className="flex flex-wrap gap-3">
         <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "Saving..." : mode === "create" ? "Create Dealer" : "Save Changes"}
+          {isSubmitting ? (
+            <LoadingLabel label="Saving..." />
+          ) : mode === "create" ? (
+            "Create Dealer"
+          ) : (
+            "Save Changes"
+          )}
         </Button>
         <Button type="button" variant="outline" asChild>
           <Link href="/admin/dealers">Cancel</Link>

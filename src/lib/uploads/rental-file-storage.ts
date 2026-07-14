@@ -12,6 +12,7 @@ function extensionFromMime(mime: string): string {
   if (mime.includes("png")) return "png";
   if (mime.includes("webp")) return "webp";
   if (mime.includes("pdf")) return "pdf";
+  if (mime.includes("svg")) return "svg";
   return "jpg";
 }
 

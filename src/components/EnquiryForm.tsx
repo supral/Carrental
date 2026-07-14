@@ -3,6 +3,8 @@
 import { useState, FormEvent } from "react";
 import { FormType } from "@/types";
 import { formConfigs } from "@/data/form-configs";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
+import { cn } from "@/lib/utils";
 
 interface EnquiryFormProps {
   type: FormType;
@@ -73,7 +75,8 @@ export default function EnquiryForm({
   }
 
   return (
-    <div className={className}>
+    <div className={cn("relative", className)}>
+      <LoadingOverlay show={loading} label="Sending your message..." />
       {!compact && (
         <div className="mb-6">
           <h3 className="text-2xl font-bold text-gray-900">{config.title}</h3>
@@ -142,7 +145,7 @@ export default function EnquiryForm({
           disabled={loading}
           className="w-full rounded-lg bg-primary px-6 py-3 text-base font-semibold text-white hover:opacity-90 transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
         >
-          {loading ? "Sending..." : "Submit Enquiry"}
+          {loading ? <LoadingLabel label="Sending..." /> : "Submit Enquiry"}
         </button>
       </form>
     </div>

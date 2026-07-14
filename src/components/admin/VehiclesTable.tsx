@@ -45,6 +45,8 @@ export type VehicleRow = {
   rentalAvailableTo: Date | null;
   totalUnits: number;
   availableUnits: number;
+  imageUrl?: string | null;
+  specCount?: number;
   seasonOfferId: string | null;
   seasonOffer: SeasonOfferTemplateLike | null;
   isOnOffer: boolean;
@@ -586,16 +588,58 @@ export default function VehiclesTable({
     }
 
     if (tableMode === "rental") {
+      const imageColumn: ColumnDef<VehicleRow> = {
+        id: "image",
+        header: "Image",
+        cell: ({ row }) =>
+          row.original.imageUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img
+              src={row.original.imageUrl}
+              alt=""
+              className="h-12 w-16 rounded-md object-cover"
+            />
+          ) : (
+            <div className="flex h-12 w-16 items-center justify-center rounded-md bg-muted text-xs text-muted-foreground">
+              No img
+            </div>
+          ),
+      };
+
+      const listingTitleColumn: ColumnDef<VehicleRow> = {
+        accessorKey: "title",
+        header: "Listing title",
+        cell: ({ row }) => (
+          <div>
+            <p className="font-medium">{row.original.title}</p>
+            <Link
+              href={`/admin/vehicles/${row.original.id}/edit`}
+              className="text-xs text-primary hover:underline"
+            >
+              Edit
+            </Link>
+          </div>
+        ),
+      };
+
+      const specColumn: ColumnDef<VehicleRow> = {
+        id: "specifications",
+        header: "Specifications",
+        cell: ({ row }) => (
+          <span className="text-sm text-muted-foreground">
+            {row.original.specCount
+              ? `${row.original.specCount} field${row.original.specCount === 1 ? "" : "s"}`
+              : "—"}
+          </span>
+        ),
+      };
+
       return [
-        vehicleColumn,
-        yearColumn,
+        imageColumn,
+        listingTitleColumn,
         priceColumn,
+        specColumn,
         totalUnitsColumn,
-        availableUnitsColumn,
-        bookedUnitsColumn,
-        listedSinceColumn,
-        kmColumn,
-        dealerColumn,
         statusColumn,
         actionsColumn,
       ];

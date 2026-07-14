@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { LoadingLabel } from "@/components/ui/loading";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -57,7 +58,7 @@ export default function ConfirmDialog({
             onClick={onConfirm}
             disabled={isPending}
           >
-            {isPending ? "Please wait..." : confirmLabel}
+            {isPending ? <LoadingLabel label="Please wait..." /> : confirmLabel}
           </Button>
         </div>
       </DialogContent>

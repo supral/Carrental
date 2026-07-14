@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Plus, Pencil, Trash2 } from "lucide-react";
 import { formatPrice } from "@/lib/utils";
+import { LoadingLabel } from "@/components/ui/loading";
 import {
   createRentalOption,
   deleteRentalOption,
@@ -264,7 +265,15 @@ export default function RentalOptionsClient({ initialOptions }: RentalOptionsCli
             )}
           </div>
           <div className="mt-4 flex gap-2">
-            <Button onClick={handleSave} disabled={isPending}>{editingId ? "Update" : "Create"}</Button>
+            <Button onClick={handleSave} disabled={isPending}>
+              {isPending ? (
+                <LoadingLabel label="Saving..." />
+              ) : editingId ? (
+                "Update"
+              ) : (
+                "Create"
+              )}
+            </Button>
             <Button variant="outline" onClick={resetForm}>Cancel</Button>
           </div>
         </div>

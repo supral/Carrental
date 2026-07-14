@@ -42,6 +42,7 @@ import {
 import type { BookingCalendarEvent, BookingCalendarVehicle } from "@/lib/rentals/booking-calendar";
 import { getRentalBookingDisplayStatus } from "@/lib/rentals/rental-booking-status";
 import { cn } from "@/lib/utils";
+import { LoadingLabel } from "@/components/ui/loading";
 
 const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
@@ -330,7 +331,11 @@ export default function RentalBookingCalendar({
       </div>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      {pending && <p className="mt-3 text-sm text-muted-foreground">Loading calendar...</p>}
+      {pending && (
+        <div className="mt-3 text-sm text-muted-foreground">
+          <LoadingLabel label="Loading calendar..." />
+        </div>
+      )}
 
       {view === "month" && (
         <MonthGrid
@@ -882,7 +887,7 @@ function EditRentalModal({
                 });
               }}
             >
-              {pending ? "Saving..." : "Save rental"}
+              {pending ? <LoadingLabel label="Saving..." /> : "Save rental"}
             </Button>
           </div>
         </div>

@@ -23,6 +23,7 @@ import type {
 } from "@/lib/rentals/availability-calendar";
 import { getRentalBookingDisplayStatus } from "@/lib/rentals/rental-booking-status";
 import { cn } from "@/lib/utils";
+import { LoadingLabel } from "@/components/ui/loading";
 
 const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
@@ -99,8 +100,9 @@ export default function RentalAvailabilityCalendar({
         <div>
           <h3 className="text-lg font-semibold text-foreground">Availability calendar</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            See booked and free days for this vehicle ({totalUnits} unit
-            {totalUnits === 1 ? "" : "s"}).
+            See booked and free days from the Rental Fleet (
+            {totalUnits} vehicle{totalUnits === 1 ? "" : "s"} in active inventory). Day cells show
+            how many of those units are still free.
             {listedFrom
               ? ` Listed from ${format(parseISO(listedFrom), "dd MMM yyyy")}.`
               : ""}
@@ -157,7 +159,11 @@ export default function RentalAvailabilityCalendar({
       </div>
 
       {error && <p className="mt-3 text-sm text-red-600">{error}</p>}
-      {isPending && <p className="mt-3 text-sm text-muted-foreground">Loading calendar...</p>}
+      {isPending && (
+        <div className="mt-3 text-sm text-muted-foreground">
+          <LoadingLabel label="Loading calendar..." />
+        </div>
+      )}
 
       <div className="mt-4 grid grid-cols-7 gap-1 text-center text-xs font-semibold uppercase tracking-wide text-muted-foreground">
         {WEEKDAYS.map((day) => (
@@ -202,7 +208,7 @@ export default function RentalAvailabilityCalendar({
                 day?.reason
                   ? day.reason
                   : day
-                    ? `${day.availableUnits} of ${day.totalUnits} available`
+                    ? `${day.availableUnits} vehicle${day.availableUnits === 1 ? "" : "s"} available of ${day.totalUnits}`
                     : undefined
               }
             >

@@ -7,14 +7,17 @@ import { combineDateAndTime, normalizeTimeValue } from "@/lib/rentals/search-val
 import { calculateBookingPrice } from "@/lib/rentals/price-calculator";
 import {
   buildInitialRentalOptionSelections,
+  getOptionCategory,
+  hasProtectionChoiceSelected,
   rentalSelectionsToPayload,
 } from "@/lib/rentals/rental-option-selection";
 import RentalOptionsSelector from "@/components/car-rental/booking/RentalOptionsSelector";
 import BookingSummary from "@/components/car-rental/booking/BookingSummary";
 import RentalDateTimePicker from "@/components/car-rental/search/RentalDateTimePicker";
 import { getEnabledVehicleOptions, type VehicleRentalOptionConfig } from "@/lib/rentals/option-catalog";
-import { formatVehicleName } from "@/lib/vehicles/display";
 import { formatPrice } from "@/lib/utils";
+import { formatVehicleName } from "@/lib/vehicles/display";
+import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
 import type { RentalBookingContext } from "@/types/rental";
 import type { Vehicle } from "@/types";
 import type { FleetAvailability } from "@/lib/rentals/fleet-inventory";
@@ -143,6 +146,14 @@ export default function RentalBookingFlow({
       return;
     }
 
+    const insuranceOptions = getEnabledVehicleOptions(vehicleOptions).filter(
+      (option) => getOptionCategory(option) === "insurance"
+    );
+    if (!hasProtectionChoiceSelected(selections, insuranceOptions)) {
+      setError("Please select Standard Damage Cover or No Protection.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
@@ -251,7 +262,11 @@ export default function RentalBookingFlow({
           onSelectionsChange={setSelections}
         />
 
-        <form onSubmit={handleSubmit} className="space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="relative space-y-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm">
+          <LoadingOverlay
+            show={loading}
+            label="Processing your booking..."
+          />
           <div>
             <h2 className="text-xl font-bold text-gray-900">Driver Details</h2>
             <p className="mt-1 text-sm text-gray-600">Enter your details to confirm your booking.</p>
@@ -347,9 +362,9 @@ export default function RentalBookingFlow({
             {isUnavailable
               ? "Unavailable for Selected Dates"
               : loading
-                ? "Processing..."
+                ? <LoadingLabel label="Processing booking..." />
                 : checkingAvailability
-                  ? "Checking availability..."
+                  ? <LoadingLabel label="Checking availability..." />
                   : breakdown
                     ? `Confirm Booking · ${formatPrice(breakdown.totalAmountCents / 100)}`
                     : "Confirm Booking"}

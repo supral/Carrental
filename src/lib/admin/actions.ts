@@ -7,6 +7,7 @@ import { VehicleStatus, DealerStatus, UserStatus, AuditAction, ListingPurpose, N
 import { hasPermission } from "@/lib/admin/permissions";
 import {
   createVehicleSchema,
+  listingNamePartsFromTitle,
   parseVehicleForm,
   type CreateVehicleFormValues,
 } from "@/lib/admin/vehicle-schema";
@@ -99,7 +100,8 @@ export async function createVehicle(
   vehicleDetails?: import("@/lib/vehicles/vehicle-details").VehicleDetailsDocument,
   templateValues?: TemplateFieldValueInput[],
   customFields?: CustomFieldInput[],
-  seasonOfferId?: string | null
+  seasonOfferId?: string | null,
+  cardFeatures?: string[]
 ) {
   const user = await getSessionUser();
   if (!hasPermission(user.role, "vehicles:manage")) throw new Error("Forbidden");
@@ -108,7 +110,9 @@ export async function createVehicle(
     ...values,
     listingPurpose: ListingPurpose.RENTAL,
   });
-  const data = parseVehicleForm(parsed, uploadedImageUrls, vehicleDetails);
+  const data = parseVehicleForm(parsed, uploadedImageUrls, vehicleDetails, {
+    features: cardFeatures,
+  });
   const canPublishLive = hasPermission(user.role, "vehicles:approve");
   const status = canPublishLive ? data.status : VehicleStatus.PENDING;
   const featured = canPublishLive ? data.featured : false;
@@ -164,9 +168,6 @@ export async function createVehicle(
   if (customFields?.length) {
     await saveVehicleCustomFields(vehicle.id, customFields);
   }
-  if (data.listingPurpose === ListingPurpose.RENTAL && rentalOptionIds?.length) {
-    await saveVehicleRentalOptionAssignments(vehicle.id, rentalOptionIds);
-  }
   if (data.listingPurpose === ListingPurpose.SALE && seasonOfferId) {
     await assignSeasonOfferToVehicle(vehicle.id, seasonOfferId);
   }
@@ -186,6 +187,66 @@ export async function createVehicle(
   revalidatePath("/admin/marketing/offers");
   revalidatePath("/");
   return { id: vehicle.id };
+}
+
+export async function updateRentalVehicleType(
+  vehicleId: string,
+  input: {
+    title: string;
+    price: number;
+    imageUrls: string[];
+    features?: string[];
+    vehicleTypeId?: string | null;
+    templateValues?: TemplateFieldValueInput[];
+    customFields?: CustomFieldInput[];
+  }
+) {
+  const user = await getSessionUser();
+  if (!hasPermission(user.role, "vehicles:manage")) throw new Error("Forbidden");
+
+  const vehicle = await prisma.vehicle.findUnique({
+    where: { id: vehicleId },
+    select: { listingPurpose: true },
+  });
+
+  if (!vehicle || vehicle.listingPurpose !== ListingPurpose.RENTAL) {
+    throw new Error("Vehicle is not a rental listing");
+  }
+
+  if (input.imageUrls.length === 0) {
+    throw new Error("At least one image is required");
+  }
+
+  const nameParts = listingNamePartsFromTitle(input.title);
+  const features = (input.features ?? [])
+    .map((feature) => feature.trim())
+    .filter(Boolean);
+
+  await prisma.$transaction([
+    prisma.vehicleImage.deleteMany({ where: { vehicleId } }),
+    prisma.vehicle.update({
+      where: { id: vehicleId },
+      data: {
+        title: input.title.trim(),
+        make: nameParts.make,
+        model: nameParts.model,
+        price: input.price,
+        features,
+        ...(input.vehicleTypeId !== undefined ? { vehicleTypeId: input.vehicleTypeId } : {}),
+        images: {
+          create: input.imageUrls.map((url, order) => ({ url, order })),
+        },
+      },
+    }),
+  ]);
+
+  if (input.templateValues) await saveVehicleTemplateValues(vehicleId, input.templateValues);
+  if (input.customFields) await saveVehicleCustomFields(vehicleId, input.customFields);
+
+  await logAudit(user.id, "UPDATE", "Vehicle", vehicleId, { rentalType: true });
+  revalidatePath("/admin/vehicles");
+  revalidatePath(`/admin/vehicles/${vehicleId}/edit`);
+  revalidatePath("/car-rental", "layout");
 }
 
 export async function updateVehicleRentalOptions(

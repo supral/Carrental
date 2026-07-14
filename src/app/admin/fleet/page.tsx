@@ -18,7 +18,8 @@ export default async function AdminFleetPage() {
       <div className="mb-6">
         <h1 className="text-2xl font-bold">Rental Fleet</h1>
         <p className="text-muted-foreground">
-          Physical vehicles on the road. Shared specs come from Vehicle Types.
+          Fleet # identifies each physical car. Fleet Size / Available / Rented are live counts for
+          that vehicle type (not stored).
         </p>
       </div>
       <FleetVehiclesTable rows={rows} />

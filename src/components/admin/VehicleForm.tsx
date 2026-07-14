@@ -14,6 +14,7 @@ import {
   LISTING_PURPOSE_LABELS,
   type CreateVehicleFormValues,
 } from "@/lib/admin/vehicle-schema";
+import RentalCardFeaturesForm from "@/components/admin/RentalCardFeaturesForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -57,6 +58,7 @@ import {
 import SaleVehicleExtraFieldsForm from "@/components/admin/SaleVehicleExtraFieldsForm";
 import { Car, KeyRound } from "lucide-react";
 import type { AssignableOfferOption } from "@/lib/admin/offer-actions";
+import { LoadingLabel } from "@/components/ui/loading";
 
 const PURPOSE_OPTIONS: { value: ListingPurpose; label: string; description: string; icon: React.ElementType }[] = [
   {
@@ -164,6 +166,7 @@ export default function VehicleForm({
   const [vehicleDetails, setVehicleDetails] = useState<VehicleDetailsDocument>({
     sections: getDefaultDetailSections("Sedan", rentalOnly ? "rental" : "sale"),
   });
+  const [cardFeatures, setCardFeatures] = useState<string[]>([]);
 
   const {
     register,
@@ -207,6 +210,14 @@ export default function VehicleForm({
   const bodyType = watch("bodyType");
   const vehicleTypeId = watch("vehicleTypeId");
   const isRental = rentalOnly || listingPurpose === ListingPurpose.RENTAL;
+
+  useEffect(() => {
+    if (!rentalOnly) return;
+    setValue("make", "Rental");
+    setValue("model", "Type");
+    setValue("year", new Date().getFullYear());
+    setValue("mileage", 0);
+  }, [rentalOnly, setValue]);
 
   useEffect(() => {
     if (!vehicleTypeId) {
@@ -260,11 +271,12 @@ export default function VehicleForm({
       const result = await createVehicle(
         values,
         uploadedImages,
-        isRental ? selectedRentalOptionIds : undefined,
-        vehicleDetails,
+        undefined,
+        isRental ? undefined : vehicleDetails,
         templateSelectionsToInputs(templateFields, selectedTemplateFieldIds, templateValueOverrides),
         mergedCustomFields,
-        !isRental && selectedSeasonOfferId ? selectedSeasonOfferId : undefined
+        !isRental && selectedSeasonOfferId ? selectedSeasonOfferId : undefined,
+        rentalOnly ? cardFeatures : undefined
       );
       router.push(`/admin/vehicles?created=${result.id}`);
       router.refresh();
@@ -439,6 +451,38 @@ export default function VehicleForm({
             </div>
           </FieldGroup>
         </>
+      ) : rentalOnly ? (
+        <>
+          <FieldGroup
+            title="Listing"
+            description="Marketing details customers see when browsing rental types."
+          >
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="Listing title" error={errors.title?.message} className="sm:col-span-2">
+                <Input placeholder="e.g. Toyota Hilux SR5" {...register("title")} />
+              </Field>
+              <Field label="Daily rate (AUD)" error={errors.price?.message}>
+                <Input type="number" min={0} step={1} {...register("price", { valueAsNumber: true })} />
+              </Field>
+            </div>
+          </FieldGroup>
+
+          <FieldGroup title="Type image" description="Photos shown on the rental listing.">
+            <VehicleImageUpload
+              images={uploadedImages}
+              onChange={setUploadedImages}
+              onUploadingChange={setUploadingImages}
+              error={imageError}
+            />
+          </FieldGroup>
+
+          <FieldGroup
+            title="Card features"
+            description="These appear automatically on the public rental search card."
+          >
+            <RentalCardFeaturesForm features={cardFeatures} onChange={setCardFeatures} />
+          </FieldGroup>
+        </>
       ) : (
         <FieldGroup
           title="Basic Information"
@@ -475,9 +519,14 @@ export default function VehicleForm({
       )}
 
       <FieldGroup
-        title="Vehicle Type"
-        description="Select a type, then tick which specifications to show on this vehicle's details page."
+        title="Specifications"
+        description={
+          rentalOnly
+            ? "Select specification fields shown on this vehicle type listing."
+            : "Select a type, then tick which specifications to show on this vehicle's details page."
+        }
       >
+        {!rentalOnly && (
         <Field label="Vehicle Type" error={errors.vehicleTypeId?.message} className="max-w-md">
           <Select
             value={vehicleTypeId || "none"}
@@ -494,6 +543,26 @@ export default function VehicleForm({
             </SelectContent>
           </Select>
         </Field>
+        )}
+
+        {rentalOnly && (
+          <Field label="Specification template" error={errors.vehicleTypeId?.message} className="max-w-md">
+            <Select
+              value={vehicleTypeId || "none"}
+              onValueChange={(value) =>
+                setValue("vehicleTypeId", value === "none" ? undefined : value, { shouldValidate: true })
+              }
+            >
+              <SelectTrigger><SelectValue placeholder="Optional template" /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="none">No template</SelectItem>
+                {vehicleTypes.map((type) => (
+                  <SelectItem key={type.id} value={type.id}>{type.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </Field>
+        )}
 
         <div className="mt-5">
           <VehicleTemplateFieldsForm
@@ -511,7 +580,7 @@ export default function VehicleForm({
         </div>
       </FieldGroup>
 
-      {isRental && (
+      {isRental && !rentalOnly && (
         <FieldGroup
           title="Physical fleet units"
           description="Physical cars are managed separately so you can reuse this type for many units."
@@ -527,16 +596,35 @@ export default function VehicleForm({
         </FieldGroup>
       )}
 
-      {isRental && (
-        <FieldGroup
-          title="Rental Options"
-          description="Select which rental options are available for this vehicle at checkout."
-        >
-          <VehicleRentalOptionsChecklist
-            options={rentalOptions}
-            selectedIds={selectedRentalOptionIds}
-            onChange={setSelectedRentalOptionIds}
-          />
+      {rentalOnly && (
+        <FieldGroup title="Publishing">
+          <input type="hidden" {...register("dealerId")} />
+          <input type="hidden" {...register("totalUnits", { valueAsNumber: true })} />
+          <div className="max-w-md">
+            <Field label="Status" error={errors.status?.message}>
+              {canPublishLive ? (
+                <Select value={status} onValueChange={(v) => setValue("status", v as VehicleStatus)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={VehicleStatus.DRAFT}>Draft</SelectItem>
+                    <SelectItem value={VehicleStatus.PENDING}>Pending Review</SelectItem>
+                    <SelectItem value={VehicleStatus.ACTIVE}>Active (Live)</SelectItem>
+                  </SelectContent>
+                </Select>
+              ) : (
+                <p className="rounded-lg border border-yellow-200 bg-yellow-50 px-4 py-3 text-sm text-yellow-900">
+                  Submitted for super admin review.
+                </p>
+              )}
+            </Field>
+          </div>
+          <p className="mt-3 text-sm text-muted-foreground">
+            Add physical cars under{" "}
+            <a href="/admin/fleet" className="font-medium text-primary hover:underline">
+              Rental Fleet
+            </a>{" "}
+            after saving. Rental options are set per fleet unit there.
+          </p>
         </FieldGroup>
       )}
 
@@ -577,7 +665,7 @@ export default function VehicleForm({
         </FieldGroup>
       )}
 
-      {isRental && (
+      {isRental && !rentalOnly && (
         <FieldGroup title="Specifications" description="Technical details shown on the rental listing.">
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <Field label="Mileage (km)" error={errors.mileage?.message}>
@@ -639,6 +727,7 @@ export default function VehicleForm({
         </FieldGroup>
       )}
 
+      {!rentalOnly && (
       <FieldGroup
         title={isRental ? "Vehicle Details" : "Description"}
         description={
@@ -654,7 +743,9 @@ export default function VehicleForm({
           listingPurpose={isRental ? "rental" : "sale"}
         />
       </FieldGroup>
+      )}
 
+      {!rentalOnly && (
       <FieldGroup title="Images & Publishing" description="Upload photos from your device or add image URLs.">
         <div className="space-y-4">
           <VehicleImageUpload
@@ -693,6 +784,7 @@ export default function VehicleForm({
           </div>
         </div>
       </FieldGroup>
+      )}
 
       {submitError && (
         <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-600 dark:bg-red-950/30">{submitError}</p>
@@ -703,7 +795,15 @@ export default function VehicleForm({
           <Link href="/admin/vehicles">Cancel</Link>
         </Button>
         <Button type="submit" disabled={isSubmitting || uploadingImages}>
-          {isSubmitting ? "Creating..." : uploadingImages ? "Uploading..." : "Create Vehicle"}
+          {isSubmitting ? (
+            <LoadingLabel label="Creating..." />
+          ) : uploadingImages ? (
+            <LoadingLabel label="Uploading..." />
+          ) : rentalOnly ? (
+            "Create Vehicle Type"
+          ) : (
+            "Create Vehicle"
+          )}
         </Button>
       </div>
     </form>

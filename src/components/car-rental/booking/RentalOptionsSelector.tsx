@@ -10,15 +10,31 @@ import {
 import {
   getOptionCategory,
   getOptionLabel,
+  hasProtectionChoiceSelected,
+  NO_PROTECTION_OPTION_TYPE,
   optionSupportsQuantity,
   type RentalOptionSelections,
 } from "@/lib/rentals/rental-option-selection";
+import { cn } from "@/lib/utils";
+
+const NO_PROTECTION_OPTION: VehicleRentalOptionConfig = {
+  type: NO_PROTECTION_OPTION_TYPE,
+  enabled: true,
+  category: "insurance",
+  label: "No Protection",
+  description: "Drive without optional damage cover. Standard excess applies.",
+  price: 0,
+  priceType: "per_day",
+};
 
 interface RentalOptionsSelectorProps {
   vehicleOptions: VehicleRentalOptionConfig[];
   selections: RentalOptionSelections;
   onSelectionsChange: (selections: RentalOptionSelections) => void;
   className?: string;
+  /** When true, protection choice is required (Standard cover or No Protection). */
+  requireProtectionChoice?: boolean;
+  protectionError?: string;
 }
 
 export default function RentalOptionsSelector({
@@ -26,6 +42,8 @@ export default function RentalOptionsSelector({
   selections,
   onSelectionsChange,
   className = "",
+  requireProtectionChoice = true,
+  protectionError,
 }: RentalOptionsSelectorProps) {
   const enabledOptions = getEnabledVehicleOptions(vehicleOptions);
   const insuranceOptions = enabledOptions.filter(
@@ -35,7 +53,13 @@ export default function RentalOptionsSelector({
     (option) => getOptionCategory(option) !== "insurance"
   );
 
-  if (enabledOptions.length === 0) {
+  const protectionOptions =
+    insuranceOptions.length > 0 ? insuranceOptions : [];
+
+  const showProtection =
+    requireProtectionChoice || protectionOptions.length > 0 || extraOptions.length > 0;
+
+  if (!showProtection && enabledOptions.length === 0) {
     return null;
   }
 
@@ -48,7 +72,7 @@ export default function RentalOptionsSelector({
 
   const selectProtectionOption = (selectedType: string) => {
     const next: RentalOptionSelections = { ...selections };
-    for (const option of insuranceOptions) {
+    for (const option of protectionOptions) {
       const key = String(option.type);
       next[key] = {
         ...next[key],
@@ -56,8 +80,14 @@ export default function RentalOptionsSelector({
         quantity: next[key]?.quantity ?? 1,
       };
     }
+    next[NO_PROTECTION_OPTION_TYPE] = {
+      selected: selectedType === NO_PROTECTION_OPTION_TYPE,
+      quantity: 1,
+    };
     onSelectionsChange(next);
   };
+
+  const protectionChosen = hasProtectionChoiceSelected(selections, protectionOptions);
 
   return (
     <section className={`space-y-6 ${className}`}>
@@ -66,11 +96,26 @@ export default function RentalOptionsSelector({
         <p className="mt-1 text-sm text-gray-600">Choose protection and extras for your rental.</p>
       </div>
 
-      {insuranceOptions.length > 0 && (
+      {(requireProtectionChoice || protectionOptions.length > 0) && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold text-gray-900">Protection</h3>
-          <div className="space-y-3" role="radiogroup" aria-label="Protection options">
-            {insuranceOptions.map((option) => {
+          <div>
+            <h3 className="text-lg font-semibold text-gray-900">
+              Protection <span className="text-primary">*</span>
+            </h3>
+            <p className="mt-1 text-sm text-gray-600">
+              Select Standard Damage Cover or No Protection.
+            </p>
+          </div>
+          <div
+            className={cn(
+              "space-y-3",
+              !protectionChosen && protectionError && "rounded-xl ring-2 ring-destructive/40 p-1"
+            )}
+            role="radiogroup"
+            aria-label="Protection options"
+            aria-required={requireProtectionChoice}
+          >
+            {protectionOptions.map((option) => {
               const optionKey = String(option.type);
               return (
                 <InsuranceCard
@@ -83,7 +128,19 @@ export default function RentalOptionsSelector({
                 />
               );
             })}
+            <InsuranceCard
+              option={NO_PROTECTION_OPTION}
+              label="No Protection"
+              name="rental-protection"
+              selected={selections[NO_PROTECTION_OPTION_TYPE]?.selected ?? false}
+              onSelect={() => selectProtectionOption(NO_PROTECTION_OPTION_TYPE)}
+            />
           </div>
+          {requireProtectionChoice && !protectionChosen && (
+            <p className="text-sm text-red-600">
+              {protectionError || "Please select Standard Damage Cover or No Protection."}
+            </p>
+          )}
         </div>
       )}
 

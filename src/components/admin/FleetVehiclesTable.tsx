@@ -15,16 +15,20 @@ import { deleteFleetVehicle } from "@/lib/admin/fleet-vehicle-actions";
 export type FleetVehicleRow = {
   id: string;
   fleetNumber: string;
+  year: number;
+  make: string;
+  model: string;
   registrationNumber: string | null;
-  vinNumber: string | null;
-  status: FleetVehicleStatus;
-  branch: string | null;
   odometer: number | null;
-  color: string | null;
   vehicleId: string;
   vehicleName: string;
-  dailyPrice: number;
-  createdAt: string;
+  rentalOptions: string[];
+  status: FleetVehicleStatus;
+  fleetSize: number;
+  available: number;
+  rented: number;
+  reserved: number;
+  maintenance: number;
 };
 
 const STATUS_CLASS: Record<FleetVehicleStatus, string> = {
@@ -43,18 +47,76 @@ export default function FleetVehiclesTable({ rows }: { rows: FleetVehicleRow[] }
   const columns = useMemo<ColumnDef<FleetVehicleRow>[]>(
     () => [
       {
+        accessorKey: "year",
+        header: "Year",
+        cell: ({ row }) => row.original.year || "—",
+      },
+      {
         accessorKey: "fleetNumber",
         header: "Fleet #",
         cell: ({ row }) => (
-          <div>
-            <p className="font-semibold">{row.original.fleetNumber}</p>
-            <p className="text-xs text-muted-foreground">{row.original.registrationNumber || "No plate"}</p>
-          </div>
+          <span className="font-mono font-semibold tracking-tight">{row.original.fleetNumber}</span>
         ),
       },
       {
+        accessorKey: "fleetSize",
+        header: "Fleet Size",
+        cell: ({ row }) => (
+          <span className="tabular-nums font-medium" title="Total units of this vehicle type">
+            {row.original.fleetSize}
+          </span>
+        ),
+      },
+      {
+        accessorKey: "available",
+        header: "Available",
+        cell: ({ row }) => (
+          <span className="tabular-nums font-medium text-green-700">{row.original.available}</span>
+        ),
+      },
+      {
+        accessorKey: "rented",
+        header: "Rented",
+        cell: ({ row }) => (
+          <span className="tabular-nums font-medium text-blue-700">{row.original.rented}</span>
+        ),
+      },
+      {
+        accessorKey: "reserved",
+        header: "Reserved",
+        cell: ({ row }) => (
+          <span className="tabular-nums text-purple-700">{row.original.reserved}</span>
+        ),
+      },
+      {
+        accessorKey: "maintenance",
+        header: "Maintenance",
+        cell: ({ row }) => (
+          <span className="tabular-nums text-amber-700">{row.original.maintenance}</span>
+        ),
+      },
+      {
+        accessorKey: "make",
+        header: "Make",
+      },
+      {
+        accessorKey: "model",
+        header: "Model",
+      },
+      {
+        accessorKey: "registrationNumber",
+        header: "Registration",
+        cell: ({ row }) => row.original.registrationNumber || "—",
+      },
+      {
+        accessorKey: "odometer",
+        header: "Current KM",
+        cell: ({ row }) =>
+          row.original.odometer != null ? `${row.original.odometer.toLocaleString()} km` : "—",
+      },
+      {
         accessorKey: "vehicleName",
-        header: "Vehicle type",
+        header: "Vehicle Type",
         cell: ({ row }) => (
           <div>
             <p className="font-medium">{row.original.vehicleName}</p>
@@ -68,11 +130,6 @@ export default function FleetVehiclesTable({ rows }: { rows: FleetVehicleRow[] }
         ),
       },
       {
-        accessorKey: "branch",
-        header: "Branch",
-        cell: ({ row }) => row.original.branch || "—",
-      },
-      {
         accessorKey: "status",
         header: "Status",
         cell: ({ row }) => (
@@ -80,18 +137,12 @@ export default function FleetVehiclesTable({ rows }: { rows: FleetVehicleRow[] }
         ),
       },
       {
-        accessorKey: "odometer",
-        header: "Odometer",
-        cell: ({ row }) =>
-          row.original.odometer != null ? `${row.original.odometer.toLocaleString()} km` : "—",
-      },
-      {
         id: "actions",
         header: "",
         cell: ({ row }) => (
           <div className="flex items-center justify-end gap-1">
             <Button asChild type="button" variant="ghost" size="sm">
-              <Link href={`/admin/fleet/${row.original.id}/history`}>History</Link>
+              <Link href={`/admin/fleet/type/${row.original.vehicleId}`}>History</Link>
             </Button>
             <Button
               type="button"
@@ -127,7 +178,7 @@ export default function FleetVehiclesTable({ rows }: { rows: FleetVehicleRow[] }
           if (!open) setDeleteId(null);
         }}
         title="Delete fleet unit?"
-        description="This removes the physical vehicle from the fleet. Active bookings cannot be deleted."
+        description="This removes the physical vehicle from the fleet. Active bookings cannot be deleted. Fleet Numbers are not reused."
         confirmLabel="Delete"
         destructive
         isPending={pending}

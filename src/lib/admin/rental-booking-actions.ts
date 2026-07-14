@@ -166,6 +166,16 @@ export type AdminCreateRentalBookingInput = {
   customerZip: string;
   customerDob: string;
   customerCountry: string;
+  drivingLicenceNumber?: string;
+  licencePhotoUrl?: string;
+  licenceExpiry?: string;
+  signatureText?: string;
+  acceptRentalTerms?: boolean;
+  acceptInsuranceExcess?: boolean;
+  acceptFuelPolicy?: boolean;
+  acceptExtraKilometres?: boolean;
+  acceptLateReturnCharges?: boolean;
+  acceptDamagePolicy?: boolean;
   notes?: string;
   bookingSource?: "walk_in" | "phone" | "other";
   selectedOptions?: SelectedRentalOptionInput[];
@@ -189,6 +199,36 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
     throw new Error("Invalid date of birth");
   }
 
+  const agreementProvided = Boolean(
+    input.drivingLicenceNumber?.trim() &&
+      input.licencePhotoUrl?.trim() &&
+      input.signatureText?.trim() &&
+      input.acceptRentalTerms &&
+      input.acceptInsuranceExcess &&
+      input.acceptFuelPolicy &&
+      input.acceptExtraKilometres &&
+      input.acceptLateReturnCharges &&
+      input.acceptDamagePolicy
+  );
+
+  const partialAgreementAttempted = Boolean(
+    input.drivingLicenceNumber?.trim() ||
+      input.licencePhotoUrl?.trim() ||
+      input.signatureText?.trim() ||
+      input.acceptRentalTerms ||
+      input.acceptInsuranceExcess ||
+      input.acceptFuelPolicy ||
+      input.acceptExtraKilometres ||
+      input.acceptLateReturnCharges ||
+      input.acceptDamagePolicy
+  );
+
+  if (partialAgreementAttempted && !agreementProvided) {
+    throw new Error(
+      "To complete the rental agreement here, fill licence number, licence image, typed signature, and accept all terms."
+    );
+  }
+
   const sourceLabel =
     input.bookingSource === "phone"
       ? "Phone"
@@ -198,6 +238,7 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
 
   const noteParts = [
     `Admin booking (${sourceLabel}) by ${admin.email ?? admin.name ?? admin.id}`,
+    agreementProvided ? "Rental agreement completed in office by admin." : null,
     input.notes?.trim() || null,
   ].filter(Boolean);
 
@@ -214,6 +255,8 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
     customerZip: input.customerZip.trim(),
     customerDob,
     customerCountry: input.customerCountry.trim() || "Australia",
+    drivingLicenceNumber: input.drivingLicenceNumber?.trim() || undefined,
+    licencePhotoUrl: input.licencePhotoUrl?.trim() || undefined,
     notes: noteParts.join("\n"),
     selectedOptions: input.selectedOptions ?? [],
   });
@@ -221,11 +264,35 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
   const { sendRentalBookingConfirmationEmail } = await import(
     "@/lib/rentals/rental-booking-email"
   );
-  const { sendRentalAgreementRequestEmail } = await import(
-    "@/lib/rentals/rental-workflow-emails"
-  );
   await sendRentalBookingConfirmationEmail(booking).catch(() => undefined);
-  if (booking.agreementToken) {
+
+  if (agreementProvided) {
+    const { applyAdminAssistedAgreement } = await import(
+      "@/lib/rentals/rental-agreement-service"
+    );
+    await applyAdminAssistedAgreement(booking.id, {
+      customerName: input.customerName.trim(),
+      customerEmail: input.customerEmail.trim(),
+      customerPhone: input.customerPhone.trim(),
+      customerAddress: input.customerAddress.trim(),
+      customerDob,
+      drivingLicenceNumber: input.drivingLicenceNumber!.trim(),
+      licencePhotoUrl: input.licencePhotoUrl!.trim(),
+      licenceExpiry: input.licenceExpiry?.trim() || null,
+      signatureText: input.signatureText!.trim(),
+      terms: {
+        rentalTerms: true,
+        insuranceExcess: true,
+        fuelPolicy: true,
+        extraKilometres: true,
+        lateReturnCharges: true,
+        damagePolicy: true,
+      },
+    });
+  } else if (booking.agreementToken) {
+    const { sendRentalAgreementRequestEmail } = await import(
+      "@/lib/rentals/rental-workflow-emails"
+    );
     await sendRentalAgreementRequestEmail({
       id: booking.id,
       customerEmail: booking.customerEmail,
@@ -246,7 +313,8 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
   return {
     id: booking.id,
     totalAmountCents: booking.totalAmountCents,
-    status: booking.status,
+    status: agreementProvided ? "WAITING_FOR_VEHICLE_ASSIGNMENT" : booking.status,
+    agreementCompletedInOffice: agreementProvided,
   };
 }
 

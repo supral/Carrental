@@ -71,7 +71,14 @@ export async function getVehicleMonthAvailability(
 
   if (!vehicle) return null;
 
-  const totalUnits = Math.max(1, vehicle.totalUnits ?? 1);
+  const fleetBookable = await prisma.fleetVehicle.count({
+    where: {
+      vehicleId,
+      status: { in: ["AVAILABLE", "RENTED", "RESERVED"] },
+    },
+  });
+  const totalUnits =
+    fleetBookable > 0 ? fleetBookable : Math.max(1, vehicle.totalUnits ?? 1);
   const monthStart = startOfMonth(new Date(year, month - 1, 1));
   const monthEnd = endOfMonth(monthStart);
   const rangeEnd = addDays(endOfDay(monthEnd), 1);
