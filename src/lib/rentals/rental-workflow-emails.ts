@@ -111,12 +111,32 @@ export async function sendRentalClosedEmail(
 }
 
 export async function sendRentalInvoiceEmail(
-  booking: BaseBookingMail & { invoiceSummary: string }
+  invoice: import("@/lib/rentals/rental-invoice").RentalInvoiceInput
 ) {
-  if (!booking.customerEmail) return;
+  if (!invoice.customerEmail) return;
+
+  const {
+    buildRentalInvoiceEmailContent,
+    generateRentalInvoicePdf,
+  } = await import("@/lib/rentals/rental-invoice");
+
+  const { pdfUrl, invoiceNumber } = await generateRentalInvoicePdf(invoice);
+  const content = buildRentalInvoiceEmailContent(invoice, invoiceNumber);
+  const abs = publicUrlToAbsolutePath(pdfUrl);
+
   await sendEmail({
-    to: booking.customerEmail,
-    subject: `Rental invoice — ${siteConfig.name}`,
-    text: `Hi ${booking.customerName ?? "there"},\n\n${booking.invoiceSummary}\n\n${siteConfig.name}`,
+    to: invoice.customerEmail,
+    subject: content.subject,
+    text: content.text,
+    html: content.html,
+    attachments: [
+      {
+        filename: `rental-invoice-${invoiceNumber}.pdf`,
+        path: abs,
+        contentType: "application/pdf",
+      },
+    ],
   });
+
+  return { pdfUrl, invoiceNumber };
 }

@@ -84,6 +84,49 @@ export async function previewNextFleetNumber(vehicleId: string) {
   return allocateNextFleetNumber(vehicleId);
 }
 
+export async function listFleetTypeSummaries() {
+  await requireFleetAdmin();
+
+  const types = await prisma.vehicle.findMany({
+    where: {
+      listingPurpose: ListingPurpose.RENTAL,
+      fleetVehicles: { some: {} },
+    },
+    select: {
+      id: true,
+      title: true,
+      make: true,
+      model: true,
+      year: true,
+      vehicleNumber: true,
+    },
+    orderBy: [{ title: "asc" }, { make: "asc" }, { model: "asc" }],
+  });
+
+  const statsByType = await getFleetTypeStatusCountsBatch(types.map((type) => type.id));
+
+  return types.map((type) => {
+    const stats = statsByType.get(type.id) ?? {
+      fleetSize: 0,
+      available: 0,
+      rented: 0,
+      reserved: 0,
+      maintenance: 0,
+      inactive: 0,
+    };
+
+    return {
+      vehicleId: type.id,
+      vehicleName: formatVehicleName(type),
+      fleetSize: stats.fleetSize,
+      available: stats.available,
+      rented: stats.rented,
+      reserved: stats.reserved,
+      maintenance: stats.maintenance,
+    };
+  });
+}
+
 export async function listFleetVehicles() {
   await requireFleetAdmin();
 

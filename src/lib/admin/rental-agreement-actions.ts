@@ -112,6 +112,74 @@ export async function sendAgreementEmailAction(bookingId: string) {
   return result;
 }
 
+export async function completeAgreementInOfficeAction(
+  bookingId: string,
+  raw: {
+    drivingLicenceNumber: string;
+    licencePhotoUrl: string;
+    licenceExpiry?: string;
+    signatureText: string;
+  }
+) {
+  await requireManage();
+  const booking = await prisma.rentalBooking.findUnique({
+    where: { id: bookingId },
+    select: {
+      id: true,
+      customerName: true,
+      customerEmail: true,
+      customerPhone: true,
+      customerAddress: true,
+      customerDob: true,
+      customerFormCompletedAt: true,
+    },
+  });
+  if (!booking) throw new Error("Booking not found");
+  if (booking.customerFormCompletedAt) {
+    throw new Error("Agreement is already completed");
+  }
+  if (!booking.customerName || !booking.customerEmail || !booking.customerPhone) {
+    throw new Error("Customer contact details are missing on this booking");
+  }
+  if (!booking.customerDob) {
+    throw new Error("Customer date of birth is missing on this booking");
+  }
+
+  const licence = raw.drivingLicenceNumber?.trim();
+  const photo = raw.licencePhotoUrl?.trim();
+  const signature = raw.signatureText?.trim();
+  if (!licence || !photo || !signature) {
+    throw new Error("Licence number, licence image, and typed signature are required");
+  }
+
+  const { applyAdminAssistedAgreement } = await import(
+    "@/lib/rentals/rental-agreement-service"
+  );
+  await applyAdminAssistedAgreement(bookingId, {
+    customerName: booking.customerName,
+    customerEmail: booking.customerEmail,
+    customerPhone: booking.customerPhone,
+    customerAddress: booking.customerAddress || "",
+    customerDob: booking.customerDob,
+    drivingLicenceNumber: licence,
+    licencePhotoUrl: photo,
+    licenceExpiry: raw.licenceExpiry?.trim() || null,
+    signatureText: signature,
+    terms: {
+      rentalTerms: true,
+      insuranceExcess: true,
+      fuelPolicy: true,
+      extraKilometres: true,
+      lateReturnCharges: true,
+      damagePolicy: true,
+    },
+  });
+
+  revalidatePath(`/admin/bookings/${bookingId}`);
+  revalidatePath("/admin/bookings");
+  return { ok: true };
+}
+
 export async function assignAndPickupAction(bookingId: string, raw: unknown) {
   await requireManage();
   const parsed = pickupChecklistSchema.safeParse(raw);

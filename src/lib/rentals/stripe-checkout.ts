@@ -10,32 +10,19 @@ import { formatRentalPriceSummary } from "@/lib/rentals/pricing";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { parsePricedRentalOptionLines } from "@/lib/rentals/option-catalog";
 import { sendRentalBookingConfirmationEmail } from "@/lib/rentals/rental-booking-email";
-import { sendRentalAgreementRequestEmail } from "@/lib/rentals/rental-workflow-emails";
 
-async function sendConfirmationAndAgreementEmails(booking: {
+/** Confirmation only — agreement request emails are sent manually at pickup via admin. */
+async function sendBookingConfirmationEmail(booking: {
   id: string;
   customerEmail: string | null;
   customerName: string | null;
   pickupAt: Date;
   dropoffAt: Date;
-  agreementToken?: string | null;
   [key: string]: unknown;
 }) {
   await sendRentalBookingConfirmationEmail(booking as never).catch((error) => {
     console.error("[rental-booking-email]", error);
   });
-  if (booking.agreementToken) {
-    await sendRentalAgreementRequestEmail({
-      id: booking.id,
-      customerEmail: booking.customerEmail,
-      customerName: booking.customerName,
-      pickupAt: booking.pickupAt,
-      dropoffAt: booking.dropoffAt,
-      agreementToken: booking.agreementToken,
-    }).catch((error) => {
-      console.error("[rental-agreement-email]", error);
-    });
-  }
 }
 
 export async function confirmRentalBookingWithoutPayment(bookingId: string) {
@@ -60,13 +47,16 @@ export async function confirmRentalBookingWithoutPayment(bookingId: string) {
   }
 
   if (!wasAlreadyPaid) {
-    await sendConfirmationAndAgreementEmails(result.confirmed);
+    await sendBookingConfirmationEmail(result.confirmed);
   }
 
   return result.confirmed;
 }
 
-export async function createRentalCheckoutSession(bookingId: string) {
+export async function createRentalCheckoutSession(
+  bookingId: string,
+  options?: { successUrl?: string; cancelUrl?: string }
+) {
   const booking = await prisma.rentalBooking.findUnique({
     where: { id: bookingId },
     include: {
@@ -147,6 +137,13 @@ export async function createRentalCheckoutSession(bookingId: string) {
     });
   }
 
+  const successUrl =
+    options?.successUrl ||
+    `${baseUrl}/car-rental/booking/success?session_id={CHECKOUT_SESSION_ID}`;
+  const cancelUrl =
+    options?.cancelUrl ||
+    `${baseUrl}/car-rental/booking/cancel?booking_id=${booking.id}`;
+
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
     customer_email: booking.customerEmail || undefined,
@@ -154,9 +151,10 @@ export async function createRentalCheckoutSession(bookingId: string) {
     metadata: {
       bookingId: booking.id,
       vehicleId: booking.vehicleId,
+      paymentMethod: "STRIPE",
     },
-    success_url: `${baseUrl}/car-rental/booking/success?session_id={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${baseUrl}/car-rental/booking/cancel?booking_id=${booking.id}`,
+    success_url: successUrl,
+    cancel_url: cancelUrl,
     expires_at: Math.floor(Date.now() / 1000) + 60 * 30,
   });
 
@@ -166,7 +164,11 @@ export async function createRentalCheckoutSession(bookingId: string) {
 
   await prisma.rentalBooking.update({
     where: { id: booking.id },
-    data: { stripeCheckoutSessionId: session.id },
+    data: {
+      stripeCheckoutSessionId: session.id,
+      paymentMethod: "STRIPE",
+      paymentStatus: RentalPaymentStatus.PENDING,
+    },
   });
 
   return {
@@ -221,7 +223,7 @@ export async function markRentalBookingPaid(sessionId: string) {
     );
   }
 
-  await sendConfirmationAndAgreementEmails(result.confirmed);
+  await sendBookingConfirmationEmail(result.confirmed);
 
   return prisma.rentalBooking.update({
     where: { id: bookingId },

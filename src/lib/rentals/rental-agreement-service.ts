@@ -31,6 +31,10 @@ import {
   sendVehicleReadyEmail,
 } from "@/lib/rentals/rental-workflow-emails";
 import { saveDataUrlUpload } from "@/lib/uploads/rental-file-storage";
+import {
+  assertWorkflowPickupDay,
+  assertWorkflowReturnDay,
+} from "@/lib/rentals/rental-workflow";
 
 const AGREEMENT_TOKEN_DAYS = 30;
 
@@ -255,14 +259,16 @@ export async function applyAdminAssistedAgreement(
   }).catch(() => undefined);
 }
 
+/** Issues agreement token/status only — does not email. Staff send via admin button at pickup. */
 export async function afterBookingConfirmedStartAgreement(bookingId: string) {
   const previous = await prisma.rentalBooking.findUnique({
     where: { id: bookingId },
-    select: { status: true },
+    select: { status: true, customerFormCompletedAt: true },
   });
   if (!previous) return;
+  if (previous.customerFormCompletedAt) return;
 
-  const updated = await prisma.$transaction(async (tx) => {
+  return prisma.$transaction(async (tx) => {
     await handleRentalBookingStatusChange(
       bookingId,
       previous.status,
@@ -271,19 +277,6 @@ export async function afterBookingConfirmedStartAgreement(bookingId: string) {
     );
     return issueAgreementTokenAndRequestForm(bookingId, tx);
   });
-
-  if (updated.agreementToken) {
-    await sendRentalAgreementRequestEmail({
-      id: updated.id,
-      customerEmail: updated.customerEmail,
-      customerName: updated.customerName,
-      pickupAt: updated.pickupAt,
-      dropoffAt: updated.dropoffAt,
-      agreementToken: updated.agreementToken,
-    });
-  }
-
-  return updated;
 }
 
 export async function getAgreementBookingByToken(bookingId: string, token: string) {
@@ -408,16 +401,56 @@ export async function assignVehicleAndCompletePickup(
     },
   });
   if (!booking) throw new Error("Booking not found");
+
+  const formComplete =
+    Boolean(booking.customerFormCompletedAt) || booking.drivers.length > 0;
+
+  // Pickup already done but PDF failed earlier — regenerate only.
+  if (
+    booking.status === RentalBookingStatus.ACTIVE &&
+    booking.fleetVehicleId &&
+    !booking.agreementPdfUrl
+  ) {
+    return regenerateAgreementPdfForPickup(bookingId, input);
+  }
+
+  if (booking.status === RentalBookingStatus.ACTIVE && booking.agreementPdfUrl) {
+    throw new Error("Vehicle already assigned and agreement PDF was generated for this booking.");
+  }
+
+  // Heal stuck bookings: form/drivers done but status never advanced.
+  if (
+    formComplete &&
+    (booking.status === RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM ||
+      booking.status === RentalBookingStatus.CONFIRMED)
+  ) {
+    await prisma.rentalBooking.update({
+      where: { id: bookingId },
+      data: {
+        status: RentalBookingStatus.WAITING_FOR_VEHICLE_ASSIGNMENT,
+        customerFormCompletedAt: booking.customerFormCompletedAt ?? new Date(),
+      },
+    });
+    booking.status = RentalBookingStatus.WAITING_FOR_VEHICLE_ASSIGNMENT;
+  }
+
   if (
     booking.status !== RentalBookingStatus.WAITING_FOR_VEHICLE_ASSIGNMENT &&
     booking.status !== RentalBookingStatus.READY_FOR_PICKUP &&
     booking.status !== RentalBookingStatus.CONFIRMED
   ) {
-    throw new Error("Booking is not ready for vehicle assignment / pickup");
+    throw new Error(
+      formComplete
+        ? "Booking is not ready for vehicle assignment / pickup"
+        : "Complete the rental agreement first (customer form or office agreement), then assign the vehicle."
+    );
   }
-  if (!booking.customerFormCompletedAt && booking.drivers.length === 0) {
-    throw new Error("Customer rental agreement form is not completed");
+  if (!formComplete) {
+    throw new Error(
+      "Complete the rental agreement first (customer form or office agreement), then assign the vehicle."
+    );
   }
+  assertWorkflowPickupDay(booking.pickupAt);
 
   const fleet = await prisma.fleetVehicle.findUnique({
     where: { id: input.fleetVehicleId },
@@ -454,6 +487,9 @@ export async function assignVehicleAndCompletePickup(
     await tx.fleetVehicle.update({
       where: { id: fleet.id },
       data: {
+        registrationNumber: input.registrationNumber.trim(),
+        vinNumber: input.vinNumber.trim(),
+        color: input.color.trim(),
         currentKm: input.kmOut,
         odometer: input.kmOut,
         currentFuelLevel: input.fuelOut,
@@ -469,6 +505,99 @@ export async function assignVehicleAndCompletePickup(
     );
   });
 
+  try {
+    return await finalizePickupAgreementPdf(bookingId, {
+      booking,
+      fleet,
+      input,
+      adminSignatureUrl,
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown PDF error";
+    throw new Error(
+      `Vehicle was assigned, but the agreement PDF failed (${message}). Open this booking again and click Complete Pickup to regenerate the PDF.`
+    );
+  }
+}
+
+async function regenerateAgreementPdfForPickup(
+  bookingId: string,
+  input: PickupChecklistInput
+) {
+  const booking = await prisma.rentalBooking.findUniqueOrThrow({
+    where: { id: bookingId },
+    include: { drivers: { orderBy: { sortOrder: "asc" } }, vehicle: true },
+  });
+  const fleet = await prisma.fleetVehicle.findUniqueOrThrow({
+    where: { id: input.fleetVehicleId || booking.fleetVehicleId! },
+    include: { vehicle: true },
+  });
+  const adminSignatureUrl =
+    booking.adminPickupSignatureUrl ||
+    (await saveDataUrlUpload(input.adminSignatureDataUrl, "signatures"));
+
+  return finalizePickupAgreementPdf(bookingId, {
+    booking,
+    fleet,
+    input: {
+      ...input,
+      fleetVehicleId: fleet.id,
+      kmOut: input.kmOut || booking.kmOut || 0,
+      expectedKmIn: input.expectedKmIn || booking.expectedKmIn || 0,
+      fuelOut: input.fuelOut || booking.fuelOut || "Full",
+      dailyRateCents: input.dailyRateCents || booking.dailyRateCents || 0,
+      dailyLimitKm: input.dailyLimitKm || booking.dailyLimitKm || 200,
+      excessKmRateCents: input.excessKmRateCents || booking.excessKmRateCents || 0,
+      bondCents: input.bondCents || booking.bondCents || 0,
+      registrationNumber:
+        input.registrationNumber || fleet.registrationNumber || "UNKNOWN",
+      vinNumber: input.vinNumber || fleet.vinNumber || "UNKNOWN",
+      color: input.color || fleet.color || "Unknown",
+      timeOut: input.timeOut || (booking.timeOut ?? booking.pickupAt).toISOString(),
+      expectedReturnAt:
+        input.expectedReturnAt ||
+        (booking.expectedReturnAt ?? booking.dropoffAt).toISOString(),
+      adminSignatureDataUrl: input.adminSignatureDataUrl,
+    },
+    adminSignatureUrl,
+  });
+}
+
+async function finalizePickupAgreementPdf(
+  bookingId: string,
+  ctx: {
+    booking: {
+      customerName: string | null;
+      customerEmail: string | null;
+      customerPhone: string | null;
+      customerAddress: string | null;
+      rentalDays: number;
+      extrasAmountCents: number;
+      taxAmountCents: number;
+      totalAmountCents: number;
+      pickupAt: Date;
+      dropoffAt: Date;
+    };
+    fleet: {
+      year: number | null;
+      registrationNumber: string | null;
+      fleetNumber: string;
+      fuelType: string | null;
+      transmission: string | null;
+      vehicle: {
+        title: string | null;
+        year: number;
+        make: string;
+        model: string;
+        fuelType: string;
+        transmission: string;
+      };
+    };
+    input: PickupChecklistInput;
+    adminSignatureUrl: string;
+  }
+) {
+  const { booking, fleet, input, adminSignatureUrl } = ctx;
   const drivers = await prisma.rentalDriver.findMany({
     where: { bookingId },
     orderBy: { sortOrder: "asc" },
@@ -479,6 +608,9 @@ export async function assignVehicleAndCompletePickup(
     companyName: siteConfig.name,
     companyEmail: siteConfig.email,
     companyPhone: siteConfig.phone,
+    companyAddress: siteConfig.address,
+    companyWebsite: siteConfig.website,
+    companyAbn: siteConfig.abn,
     customerName:
       booking.customerName ??
       `${drivers[0]?.firstName ?? ""} ${drivers[0]?.lastName ?? ""}`.trim(),
@@ -487,24 +619,30 @@ export async function assignVehicleAndCompletePickup(
     customerAddress: booking.customerAddress ?? "",
     drivers,
     vehicle: {
+      title: fleet.vehicle.title,
       year: fleet.year ?? fleet.vehicle.year,
       make: fleet.vehicle.make,
       model: fleet.vehicle.model,
-      registration: fleet.registrationNumber,
-      vin: fleet.vinNumber,
+      registration: input.registrationNumber.trim(),
+      vin: input.vinNumber.trim(),
       fuelType: fleet.fuelType ?? fleet.vehicle.fuelType,
       transmission: fleet.transmission ?? fleet.vehicle.transmission,
-      colour: fleet.color ?? fleet.vehicle.color,
+      colour: input.color.trim(),
     },
     pickupAt: new Date(input.timeOut),
     dropoffAt: new Date(input.expectedReturnAt),
     kmOut: input.kmOut,
     expectedKmIn: input.expectedKmIn,
     fuelOut: input.fuelOut,
+    rentalDays: booking.rentalDays,
     dailyRateCents: input.dailyRateCents,
     dailyLimitKm: input.dailyLimitKm,
     bondCents: input.bondCents,
     insuranceNotes: input.insuranceNotes,
+    insuranceCostCents: booking.extrasAmountCents,
+    discountCents: 0,
+    taxAmountCents: booking.taxAmountCents,
+    totalAmountCents: booking.totalAmountCents,
     adminSignatureUrl,
   });
 
@@ -528,22 +666,22 @@ export async function assignVehicleAndCompletePickup(
   const vehicleLabel = `${fleet.vehicle.year} ${fleet.vehicle.make} ${fleet.vehicle.model} (${fleet.registrationNumber ?? fleet.fleetNumber})`;
 
   await sendVehicleReadyEmail({
-    id: booking.id,
+    id: bookingId,
     customerEmail: booking.customerEmail,
     customerName: booking.customerName,
     pickupAt: booking.pickupAt,
     dropoffAt: booking.dropoffAt,
     vehicleLabel,
-  });
+  }).catch(() => undefined);
 
   await sendRentalAgreementPdfEmail({
-    id: booking.id,
+    id: bookingId,
     customerEmail: booking.customerEmail,
     customerName: booking.customerName,
     pickupAt: booking.pickupAt,
     dropoffAt: booking.dropoffAt,
     agreementPdfUrl: result.pdfUrl,
-  });
+  }).catch(() => undefined);
 
   return result;
 }
@@ -560,6 +698,7 @@ export async function processVehicleReturn(bookingId: string, input: ReturnCheck
   if (booking.kmOut == null || !booking.fuelOut || !booking.expectedReturnAt) {
     throw new Error("Pickup checklist incomplete");
   }
+  assertWorkflowReturnDay(booking.dropoffAt, booking.expectedReturnAt);
 
   const adminSignatureUrl = await saveDataUrlUpload(input.adminSignatureDataUrl, "signatures");
   const returnedAt = new Date(input.returnedAt);
@@ -623,21 +762,55 @@ export async function processVehicleReturn(bookingId: string, input: ReturnCheck
     await handleRentalBookingStatusChange(bookingId, previousStatus, nextStatus, tx);
   });
 
-  const invoiceSummary = [
-    `Extra KM: $${(charges.extraKmChargeCents / 100).toFixed(2)}`,
-    `Fuel: $${(charges.fuelChargeCents / 100).toFixed(2)}`,
-    `Late fee: $${(charges.lateFeeCents / 100).toFixed(2)}`,
-    `Damage: $${(charges.damageChargeCents / 100).toFixed(2)}`,
-    `Outstanding: $${(charges.outstandingBalanceCents / 100).toFixed(2)}`,
-  ].join("\n");
+  const fleet = booking.fleetVehicle;
+  const vehicle = fleet?.vehicle;
+  const vehicleLabel = vehicle
+    ? vehicle.title?.trim() ||
+      `${vehicle.year} ${vehicle.make} ${vehicle.model}`
+    : "Rental vehicle";
+  const dailyRateCents =
+    booking.dailyRateCents && booking.dailyRateCents > 0
+      ? booking.dailyRateCents
+      : Math.round(
+          (booking.baseAmountCents || 0) / Math.max(1, booking.rentalDays || 1)
+        );
 
   await sendRentalInvoiceEmail({
-    id: booking.id,
-    customerEmail: booking.customerEmail,
+    bookingId: booking.id,
     customerName: booking.customerName,
+    customerEmail: booking.customerEmail,
+    customerPhone: booking.customerPhone,
+    customerAddress: booking.customerAddress,
+    vehicleLabel,
+    fleetLabel: fleet?.fleetNumber ?? null,
+    registration: fleet?.registrationNumber ?? null,
     pickupAt: booking.pickupAt,
     dropoffAt: booking.dropoffAt,
-    invoiceSummary,
+    returnedAt,
+    rentalDays: booking.rentalDays,
+    dailyRateCents,
+    dailyLimitKm: booking.dailyLimitKm,
+    excessKmRateCents: booking.excessKmRateCents ?? DEFAULT_EXCESS_KM_RATE_CENTS,
+    bondCents: booking.bondCents ?? DEFAULT_BOND_CENTS,
+    baseAmountCents: booking.baseAmountCents,
+    extrasAmountCents: booking.extrasAmountCents,
+    taxAmountCents: booking.taxAmountCents,
+    totalAmountCents: booking.totalAmountCents,
+    paymentStatus:
+      charges.outstandingBalanceCents > 0 ? "PENDING (return charges)" : booking.paymentStatus,
+    kmOut: booking.kmOut,
+    kmIn: input.kmIn,
+    fuelOut: booking.fuelOut,
+    fuelIn: input.fuelIn,
+    insuranceNotes: booking.insuranceNotes,
+    extraKmChargeCents: charges.extraKmChargeCents,
+    fuelChargeCents: charges.fuelChargeCents,
+    lateFeeCents: charges.lateFeeCents,
+    damageChargeCents: charges.damageChargeCents,
+    outstandingBalanceCents: charges.outstandingBalanceCents,
+    damageNotes: input.damageNotes || null,
+  }).catch((error) => {
+    console.error("[invoice] Failed to send rental invoice", error);
   });
 
   return charges;
@@ -652,6 +825,7 @@ export async function markRentalSettlementPaid(bookingId: string) {
   ) {
     throw new Error("Booking is not awaiting settlement");
   }
+  assertWorkflowReturnDay(booking.dropoffAt, booking.expectedReturnAt);
 
   await prisma.rentalBooking.update({
     where: { id: bookingId },
@@ -678,6 +852,7 @@ export async function completeRental(bookingId: string) {
   if ((booking.outstandingBalanceCents ?? 0) > 0) {
     throw new Error("Clear outstanding payment before completing the rental");
   }
+  assertWorkflowReturnDay(booking.dropoffAt, booking.expectedReturnAt);
 
   const previousStatus = booking.status;
 
@@ -754,7 +929,7 @@ export function pickupDefaultsFromFleet(fleet: {
     kmOut,
     expectedKmIn: kmOut + dailyLimit * Math.max(1, booking.rentalDays),
     fuelOut: fleet.currentFuelLevel ?? "Full",
-    dailyRateCents: booking.baseAmountCents || fleet.vehicle.price * 100,
+    dailyRateCents: fleet.vehicle.price * 100,
     dailyLimitKm: dailyLimit,
     excessKmRateCents: DEFAULT_EXCESS_KM_RATE_CENTS,
     bondCents: DEFAULT_BOND_CENTS,

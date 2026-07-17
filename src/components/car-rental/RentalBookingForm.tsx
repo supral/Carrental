@@ -150,7 +150,6 @@ export default function RentalBookingForm({
         customerEmail: data.email,
         customerPhone: data.phone,
         customerAddress: data.address,
-        customerZip: data.zip,
         customerDob: data.dob,
         customerCountry: data.country,
         notes: data.message,
@@ -294,33 +293,18 @@ export default function RentalBookingForm({
           />
         </div>
 
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div>
-            <label htmlFor="zip" className="mb-1 block text-sm font-medium text-gray-700">
-              ZIP / Postcode <span className="text-primary">*</span>
-            </label>
-            <input
-              id="zip"
-              name="zip"
-              type="text"
-              required
-              placeholder="e.g. 0800"
-              className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
-          <div>
-            <label htmlFor="dob" className="mb-1 block text-sm font-medium text-gray-700">
-              Date of Birth <span className="text-primary">*</span>
-            </label>
-            <input
-              id="dob"
-              name="dob"
-              type="date"
-              required
-              max={today}
-              className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-            />
-          </div>
+        <div>
+          <label htmlFor="dob" className="mb-1 block text-sm font-medium text-gray-700">
+            Date of Birth <span className="text-primary">*</span>
+          </label>
+          <input
+            id="dob"
+            name="dob"
+            type="date"
+            required
+            max={today}
+            className="w-full rounded-lg border border-gray-300 px-4 py-2.5 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+          />
         </div>
 
         <div>

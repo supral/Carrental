@@ -59,6 +59,9 @@ export type CustomerAgreementFormInput = z.infer<typeof customerAgreementFormSch
 
 export const pickupChecklistSchema = z.object({
   fleetVehicleId: z.string().min(1),
+  registrationNumber: z.string().trim().min(1, "Registration is required"),
+  vinNumber: z.string().trim().min(1, "VIN is required"),
+  color: z.string().trim().min(1, "Colour is required"),
   kmOut: z.number().int().min(0),
   expectedKmIn: z.number().int().min(0),
   fuelOut: z.string().min(1),

@@ -1,11 +1,14 @@
 "use client";
 
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { ColumnDef } from "@tanstack/react-table";
-import { Pencil } from "lucide-react";
+import { Pencil, Search } from "lucide-react";
 import DataTable from "@/components/admin/DataTable";
+import BookingCustomerDetailsDialog from "@/components/admin/BookingCustomerDetailsDialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { format } from "date-fns";
 import { formatPrice } from "@/lib/utils";
 import type { PricedRentalOptionLine } from "@/lib/rentals/option-catalog";
@@ -14,18 +17,42 @@ import {
   WORKFLOW_STATUS_BADGE_CLASS,
 } from "@/lib/rentals/rental-workflow";
 
+export type BookingDriverRow = {
+  id: string;
+  isPrimary: boolean;
+  firstName: string;
+  lastName: string;
+  dob?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  emergencyContact?: string | null;
+  emergencyPhone?: string | null;
+  licenceNumber?: string | null;
+  licenceExpiry?: string | null;
+  licenceFrontUrl?: string | null;
+  licenceBackUrl?: string | null;
+  signatureUrl?: string | null;
+};
+
 export type BookingRow = {
   id: string;
   vehicleName: string;
   customerName: string;
   customerEmail: string;
+  customerPhone?: string;
   customerAddress?: string;
-  customerZip?: string;
   customerCountry?: string;
+  customerDob?: string | null;
+  drivingLicenceNumber?: string | null;
+  licencePhotoUrl?: string | null;
+  notes?: string | null;
+  drivers: BookingDriverRow[];
   pickupAt: Date;
   dropoffAt: Date;
   status: string;
   paymentStatus: string;
+  paymentMethod?: string | null;
   baseAmountCents: number;
   extrasAmountCents: number;
   taxAmountCents: number;
@@ -34,7 +61,43 @@ export type BookingRow = {
   createdAt: Date;
 };
 
+function matchesCustomerSearch(booking: BookingRow, query: string): boolean {
+  const q = query.trim().toLowerCase();
+  if (!q) return true;
+
+  const haystack = [
+    booking.customerName,
+    booking.customerEmail,
+    booking.customerPhone,
+    booking.customerAddress,
+    booking.customerCountry,
+    booking.drivingLicenceNumber,
+    booking.vehicleName,
+    booking.id,
+    ...booking.drivers.flatMap((driver) => [
+      driver.firstName,
+      driver.lastName,
+      driver.email,
+      driver.phone,
+      driver.licenceNumber,
+    ]),
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  return haystack.includes(q);
+}
+
 export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) {
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBooking, setSelectedBooking] = useState<BookingRow | null>(null);
+
+  const filteredBookings = useMemo(
+    () => bookings.filter((booking) => matchesCustomerSearch(booking, searchQuery)),
+    [bookings, searchQuery]
+  );
+
   const columns: ColumnDef<BookingRow>[] = [
     {
       accessorKey: "vehicleName",
@@ -42,14 +105,33 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
       cell: ({ row }) => (
         <div>
           <p className="font-medium">{row.original.vehicleName}</p>
-          <p className="text-xs text-muted-foreground">{row.original.customerName}</p>
-          {(row.original.customerAddress || row.original.customerCountry) && (
-            <p className="text-xs text-muted-foreground">
-              {[row.original.customerAddress, row.original.customerZip, row.original.customerCountry]
-                .filter(Boolean)
-                .join(", ")}
+          <button
+            type="button"
+            onClick={() => setSelectedBooking(row.original)}
+            className="mt-0.5 text-left group"
+            title="View customer details"
+          >
+            <p className="text-xs font-medium text-primary group-hover:underline">
+              {row.original.customerName}
             </p>
-          )}
+            {row.original.customerEmail !== "—" && (
+              <p className="text-xs text-muted-foreground group-hover:text-primary/80">
+                {row.original.customerEmail}
+              </p>
+            )}
+            {row.original.customerPhone && (
+              <p className="text-xs text-muted-foreground group-hover:text-primary/80">
+                {row.original.customerPhone}
+              </p>
+            )}
+            {(row.original.customerAddress || row.original.customerCountry) && (
+              <p className="text-xs text-muted-foreground group-hover:text-primary/80">
+                {[row.original.customerAddress, row.original.customerCountry]
+                  .filter(Boolean)
+                  .join(", ")}
+              </p>
+            )}
+          </button>
         </div>
       ),
     },
@@ -111,15 +193,20 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
       accessorKey: "paymentStatus",
       header: "Payment",
       cell: ({ row }) => (
-        <Badge
-          className={
-            row.original.paymentStatus === "PAID"
-              ? "bg-green-100 text-green-800"
-              : "bg-yellow-100 text-yellow-800"
-          }
-        >
-          {row.original.paymentStatus}
-        </Badge>
+        <div className="space-y-1">
+          <Badge
+            className={
+              row.original.paymentStatus === "PAID"
+                ? "bg-green-100 text-green-800"
+                : "bg-yellow-100 text-yellow-800"
+            }
+          >
+            {row.original.paymentStatus}
+          </Badge>
+          {row.original.paymentMethod && (
+            <p className="text-xs text-muted-foreground">{row.original.paymentMethod}</p>
+          )}
+        </div>
       ),
     },
     {
@@ -146,5 +233,36 @@ export default function BookingsTable({ bookings }: { bookings: BookingRow[] }) 
     },
   ];
 
-  return <DataTable data={bookings} columns={columns} />;
+  return (
+    <div className="space-y-4">
+      <div className="relative w-full sm:max-w-sm lg:max-w-md">
+        <Search
+          className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+          aria-hidden
+        />
+        <Input
+          type="search"
+          value={searchQuery}
+          onChange={(event) => setSearchQuery(event.target.value)}
+          placeholder="Search customer name, email, phone..."
+          className="pl-9"
+          aria-label="Search bookings by customer"
+        />
+      </div>
+      {searchQuery.trim() && (
+        <p className="text-sm text-muted-foreground">
+          Showing {filteredBookings.length} of {bookings.length} bookings matching “
+          {searchQuery.trim()}”
+        </p>
+      )}
+      <DataTable data={filteredBookings} columns={columns} />
+      <BookingCustomerDetailsDialog
+        booking={selectedBooking}
+        open={Boolean(selectedBooking)}
+        onOpenChange={(open) => {
+          if (!open) setSelectedBooking(null);
+        }}
+      />
+    </div>
+  );
 }

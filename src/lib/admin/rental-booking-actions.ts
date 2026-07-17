@@ -163,7 +163,6 @@ export type AdminCreateRentalBookingInput = {
   customerEmail: string;
   customerPhone: string;
   customerAddress: string;
-  customerZip: string;
   customerDob: string;
   customerCountry: string;
   drivingLicenceNumber?: string;
@@ -178,11 +177,17 @@ export type AdminCreateRentalBookingInput = {
   acceptDamagePolicy?: boolean;
   notes?: string;
   bookingSource?: "walk_in" | "phone" | "other";
+  /** Required: how the customer pays in the office / online */
+  paymentMethod: "CASH" | "POS" | "STRIPE";
   selectedOptions?: SelectedRentalOptionInput[];
 };
 
 export async function createAdminRentalBooking(input: AdminCreateRentalBookingInput) {
   const admin = await requireBookingAdmin(true);
+
+  if (!["CASH", "POS", "STRIPE"].includes(input.paymentMethod)) {
+    throw new Error("Select a payment method: Cash, POS, or Stripe");
+  }
 
   const pickupAt = combineDateAndTime(input.pickupDate, normalizeTimeValue(input.pickupTime));
   const dropoffAt = combineDateAndTime(input.dropoffDate, normalizeTimeValue(input.dropoffTime));
@@ -199,8 +204,10 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
     throw new Error("Invalid date of birth");
   }
 
+  const hasLicenceNumber = Boolean(input.drivingLicenceNumber?.trim());
+
   const agreementProvided = Boolean(
-    input.drivingLicenceNumber?.trim() &&
+    hasLicenceNumber &&
       input.licencePhotoUrl?.trim() &&
       input.signatureText?.trim() &&
       input.acceptRentalTerms &&
@@ -211,21 +218,17 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
       input.acceptDamagePolicy
   );
 
-  const partialAgreementAttempted = Boolean(
-    input.drivingLicenceNumber?.trim() ||
-      input.licencePhotoUrl?.trim() ||
-      input.signatureText?.trim() ||
-      input.acceptRentalTerms ||
-      input.acceptInsuranceExcess ||
-      input.acceptFuelPolicy ||
-      input.acceptExtraKilometres ||
-      input.acceptLateReturnCharges ||
-      input.acceptDamagePolicy
-  );
-
-  if (partialAgreementAttempted && !agreementProvided) {
+  // Started filling office agreement (licence entered) but left required fields incomplete.
+  if (hasLicenceNumber && !agreementProvided) {
     throw new Error(
-      "To complete the rental agreement here, fill licence number, licence image, typed signature, and accept all terms."
+      "To complete the rental agreement here, fill licence number, licence image, typed signature, and accept all terms. Or clear the licence number to email the agreement link instead."
+    );
+  }
+
+  // Stripe payment first — finish office agreement on the booking page after payment.
+  if (input.paymentMethod === "STRIPE" && agreementProvided) {
+    throw new Error(
+      "For Stripe payments, create the booking first and complete the agreement after payment succeeds. Clear the licence fields, or choose Cash / POS."
     );
   }
 
@@ -236,13 +239,27 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
         ? "Other"
         : "Walk-in";
 
+  const paymentLabel =
+    input.paymentMethod === "CASH"
+      ? "Cash"
+      : input.paymentMethod === "POS"
+        ? "POS terminal"
+        : "Stripe Checkout";
+
   const noteParts = [
     `Admin booking (${sourceLabel}) by ${admin.email ?? admin.name ?? admin.id}`,
+    `Payment method: ${paymentLabel}`,
     agreementProvided ? "Rental agreement completed in office by admin." : null,
+    !agreementProvided && input.paymentMethod !== "STRIPE"
+      ? "Agreement form to be completed by customer (email link)."
+      : null,
+    input.paymentMethod === "STRIPE"
+      ? "Awaiting Stripe payment before confirmation emails / agreement."
+      : null,
     input.notes?.trim() || null,
   ].filter(Boolean);
 
-  const booking = await createAndConfirmRentalBooking({
+  const bookingPayload = {
     vehicleId: input.vehicleId,
     pickupAddress: input.pickupAddress.trim(),
     dropoffAddress: input.dropoffAddress.trim(),
@@ -252,14 +269,52 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
     customerEmail: input.customerEmail.trim(),
     customerPhone: input.customerPhone.trim(),
     customerAddress: input.customerAddress.trim(),
-    customerZip: input.customerZip.trim(),
     customerDob,
     customerCountry: input.customerCountry.trim() || "Australia",
-    drivingLicenceNumber: input.drivingLicenceNumber?.trim() || undefined,
-    licencePhotoUrl: input.licencePhotoUrl?.trim() || undefined,
+    drivingLicenceNumber: agreementProvided
+      ? input.drivingLicenceNumber?.trim() || undefined
+      : undefined,
+    licencePhotoUrl: agreementProvided
+      ? input.licencePhotoUrl?.trim() || undefined
+      : undefined,
     notes: noteParts.join("\n"),
+    paymentMethod: input.paymentMethod,
     selectedOptions: input.selectedOptions ?? [],
-  });
+  };
+
+  // ——— Stripe: unpaid hold + Checkout link ———
+  if (input.paymentMethod === "STRIPE") {
+    const { createRentalBooking } = await import("@/lib/rentals/availability-service");
+    const { createRentalCheckoutSession } = await import("@/lib/rentals/stripe-checkout");
+    const { getAppBaseUrl } = await import("@/lib/stripe");
+
+    const unpaid = await createRentalBooking(bookingPayload);
+    const baseUrl = getAppBaseUrl();
+    const checkout = await createRentalCheckoutSession(unpaid.id, {
+      successUrl: `${baseUrl}/car-rental/booking/success?session_id={CHECKOUT_SESSION_ID}`,
+      cancelUrl: `${baseUrl}/admin/bookings/${unpaid.id}?payment=cancelled`,
+    });
+
+    revalidatePath("/admin/bookings");
+    revalidatePath(`/admin/bookings/${unpaid.id}`);
+    revalidatePath("/admin/calendar");
+    revalidatePath("/admin/vehicles");
+    revalidatePath(`/admin/vehicles/${input.vehicleId}/edit`);
+    revalidatePath("/car-rental", "layout");
+
+    return {
+      id: unpaid.id,
+      totalAmountCents: unpaid.totalAmountCents,
+      status: unpaid.status,
+      paymentMethod: "STRIPE" as const,
+      paymentStatus: "PENDING" as const,
+      checkoutUrl: checkout.checkoutUrl,
+      agreementCompletedInOffice: false,
+    };
+  }
+
+  // ——— Cash / POS: mark paid immediately ———
+  const booking = await createAndConfirmRentalBooking(bookingPayload);
 
   const { sendRentalBookingConfirmationEmail } = await import(
     "@/lib/rentals/rental-booking-email"
@@ -289,7 +344,7 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
         damagePolicy: true,
       },
     });
-  } else if (booking.agreementToken) {
+  } else if (booking.agreementToken && booking.customerEmail) {
     const { sendRentalAgreementRequestEmail } = await import(
       "@/lib/rentals/rental-workflow-emails"
     );
@@ -314,6 +369,9 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
     id: booking.id,
     totalAmountCents: booking.totalAmountCents,
     status: agreementProvided ? "WAITING_FOR_VEHICLE_ASSIGNMENT" : booking.status,
+    paymentMethod: input.paymentMethod,
+    paymentStatus: "PAID" as const,
+    checkoutUrl: null as string | null,
     agreementCompletedInOffice: agreementProvided,
   };
 }

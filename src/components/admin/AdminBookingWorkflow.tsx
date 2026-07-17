@@ -17,6 +17,7 @@ import {
 import { useAdminToast } from "@/components/admin/AdminToastProvider";
 import {
   assignAndPickupAction,
+  completeAgreementInOfficeAction,
   completeRentalAction,
   markSettlementPaidAction,
   returnVehicleAction,
@@ -28,9 +29,12 @@ import {
   getWorkflowDisplayStatus,
   RENTAL_WORKFLOW_TIMELINE,
   getWorkflowTimelineIndex,
+  isWorkflowPickupDay,
+  isWorkflowReturnDay,
   WORKFLOW_STATUS_BADGE_CLASS,
 } from "@/lib/rentals/rental-workflow";
 import { cn, formatPrice } from "@/lib/utils";
+import { formatVehicleName } from "@/lib/vehicles/display";
 
 type FleetOption = {
   id: string;
@@ -89,7 +93,7 @@ type BookingDetail = {
   lateFeeCents: number;
   damageChargeCents: number;
   outstandingBalanceCents: number;
-  vehicle: { title: string | null; make: string; model: string; year: number };
+  vehicle: { title: string | null; make: string; model: string; year: number; price: number };
   drivers: Array<{
     id: string;
     isPrimary: boolean;
@@ -116,6 +120,8 @@ export default function AdminBookingWorkflow({
   const [agreementUrl, setAgreementUrl] = useState<string | null>(initialAgreementUrl);
   const display = getWorkflowDisplayStatus(booking.status);
   const timelineIndex = getWorkflowTimelineIndex(booking.status);
+  const pickupDay = isWorkflowPickupDay(booking.pickupAt);
+  const returnDay = isWorkflowReturnDay(booking.dropoffAt, booking.expectedReturnAt);
   const canSendAgreement =
     !booking.customerFormCompletedAt &&
     Boolean(booking.customerEmail) &&
@@ -124,6 +130,25 @@ export default function AdminBookingWorkflow({
     booking.status !== "ACTIVE" &&
     booking.status !== "RETURNED" &&
     booking.status !== "AWAITING_PAYMENT";
+  const agreementPending = !booking.customerFormCompletedAt && booking.drivers.length === 0;
+  const statusReadyForPickup =
+    !agreementPending &&
+    (booking.status === "WAITING_FOR_VEHICLE_ASSIGNMENT" ||
+      booking.status === "READY_FOR_PICKUP" ||
+      booking.status === "CONFIRMED" ||
+      // Form done but status stuck — service heals this at pickup
+      booking.status === "WAITING_FOR_CUSTOMER_FORM");
+  const needsPdfRetry = booking.status === "ACTIVE" && !booking.agreementPdfUrl;
+  const showPickupPanel = (statusReadyForPickup && pickupDay) || needsPdfRetry;
+  const showReturnPanel = booking.status === "ACTIVE" && returnDay;
+  const showSettlementPanel =
+    (booking.status === "RETURNED" || booking.status === "AWAITING_PAYMENT") && returnDay;
+
+  const [officeLicence, setOfficeLicence] = useState("");
+  const [officeLicenceExpiry, setOfficeLicenceExpiry] = useState("");
+  const [officeLicencePhotoUrl, setOfficeLicencePhotoUrl] = useState("");
+  const [officeSignature, setOfficeSignature] = useState("");
+  const [officeUploading, setOfficeUploading] = useState(false);
 
   const [fleetVehicleId, setFleetVehicleId] = useState(booking.fleetVehicleId ?? "");
   const selectedFleet = useMemo(
@@ -131,6 +156,13 @@ export default function AdminBookingWorkflow({
     [availableFleet, fleetVehicleId]
   );
 
+  const [registrationNumber, setRegistrationNumber] = useState(
+    selectedFleet?.registrationNumber ?? ""
+  );
+  const [vinNumber, setVinNumber] = useState(selectedFleet?.vinNumber ?? "");
+  const [fleetColor, setFleetColor] = useState(
+    selectedFleet?.color ?? selectedFleet?.vehicle.color ?? ""
+  );
   const [kmOut, setKmOut] = useState(booking.kmOut ?? selectedFleet?.currentKm ?? selectedFleet?.odometer ?? 0);
   const [expectedKmIn, setExpectedKmIn] = useState(
     booking.expectedKmIn ??
@@ -144,14 +176,22 @@ export default function AdminBookingWorkflow({
   const [expectedReturnAt, setExpectedReturnAt] = useState(
     format(new Date(booking.expectedReturnAt ?? booking.dropoffAt), "yyyy-MM-dd'T'HH:mm")
   );
-  const [dailyRateCents, setDailyRateCents] = useState(
-    booking.dailyRateCents ?? booking.baseAmountCents
-  );
+  const vehicleTypeDailyRate =
+    booking.vehicle.price ||
+    availableFleet[0]?.vehicle.price ||
+    0;
+  const [dailyRateDollars, setDailyRateDollars] = useState(() => {
+    if (booking.dailyRateCents != null && booking.dailyRateCents > 0) {
+      return booking.dailyRateCents / 100;
+    }
+    // Vehicle type daily rate (AUD) — not baseAmountCents (that is the full-trip total)
+    return vehicleTypeDailyRate;
+  });
   const [dailyLimitKm, setDailyLimitKm] = useState(booking.dailyLimitKm ?? 200);
-  const [excessKmRateCents, setExcessKmRateCents] = useState(
-    booking.excessKmRateCents ?? DEFAULT_EXCESS_KM_RATE_CENTS
+  const [excessKmRateDollars, setExcessKmRateDollars] = useState(
+    (booking.excessKmRateCents ?? DEFAULT_EXCESS_KM_RATE_CENTS) / 100
   );
-  const [bondCents, setBondCents] = useState(booking.bondCents ?? 50000);
+  const [bondDollars, setBondDollars] = useState((booking.bondCents ?? 50000) / 100);
   const [insuranceNotes, setInsuranceNotes] = useState(booking.insuranceNotes ?? "");
   const [pickupNotes, setPickupNotes] = useState(booking.notes ?? "");
   const [adminPickupSig, setAdminPickupSig] = useState<string | null>(null);
@@ -162,7 +202,7 @@ export default function AdminBookingWorkflow({
     format(new Date(booking.returnedAt ?? new Date()), "yyyy-MM-dd'T'HH:mm")
   );
   const [damageNotes, setDamageNotes] = useState("");
-  const [damageChargeCents, setDamageChargeCents] = useState(0);
+  const [damageChargeDollars, setDamageChargeDollars] = useState(0);
   const [damagePhotoUrls, setDamagePhotoUrls] = useState<string[]>([]);
   const [adminReturnSig, setAdminReturnSig] = useState<string | null>(null);
 
@@ -178,20 +218,44 @@ export default function AdminBookingWorkflow({
       fuelChargeCents: DEFAULT_FUEL_CHARGE_CENTS,
       expectedReturnAt: new Date(booking.expectedReturnAt),
       returnedAt: new Date(returnedAt),
-      damageChargeCents,
+      damageChargeCents: Math.round(damageChargeDollars * 100),
       rentalTotalCents: booking.totalAmountCents,
     });
-  }, [booking, kmIn, fuelIn, returnedAt, damageChargeCents]);
+  }, [booking, kmIn, fuelIn, returnedAt, damageChargeDollars]);
+
+  function calcExpectedKm(currentKm: number, limitKm: number) {
+    return currentKm + limitKm * Math.max(1, booking.rentalDays);
+  }
+
+  function dollarsToCents(value: number) {
+    return Math.round(value * 100);
+  }
 
   function onSelectFleet(id: string) {
     setFleetVehicleId(id);
     const unit = availableFleet.find((item) => item.id === id);
     if (!unit) return;
     const nextKm = unit.currentKm ?? unit.odometer ?? 0;
+    setRegistrationNumber(unit.registrationNumber ?? "");
+    setVinNumber(unit.vinNumber ?? "");
+    setFleetColor(unit.color ?? unit.vehicle.color ?? "");
     setKmOut(nextKm);
-    setExpectedKmIn(nextKm + dailyLimitKm * Math.max(1, booking.rentalDays));
+    setExpectedKmIn(calcExpectedKm(nextKm, dailyLimitKm));
     setFuelOut(unit.currentFuelLevel ?? "Full");
-    if (!dailyRateCents) setDailyRateCents(unit.vehicle.price * 100);
+    // Keep pickup daily rate aligned with the vehicle type rate for this fleet unit
+    if (booking.dailyRateCents == null || booking.dailyRateCents <= 0) {
+      setDailyRateDollars(unit.vehicle.price);
+    }
+  }
+
+  function onCurrentKmChange(value: number) {
+    setKmOut(value);
+    setExpectedKmIn(calcExpectedKm(value, dailyLimitKm));
+  }
+
+  function onDailyLimitChange(value: number) {
+    setDailyLimitKm(value);
+    setExpectedKmIn(calcExpectedKm(kmOut, value));
   }
 
   async function uploadDamage(file: File) {
@@ -209,9 +273,7 @@ export default function AdminBookingWorkflow({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="text-sm text-muted-foreground">Booking {booking.id}</p>
-          <h1 className="text-2xl font-bold">
-            {booking.vehicle.year} {booking.vehicle.make} {booking.vehicle.model}
-          </h1>
+          <h1 className="text-2xl font-bold">{formatVehicleName(booking.vehicle)}</h1>
           <span
             className={cn(
               "mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold",
@@ -261,64 +323,156 @@ export default function AdminBookingWorkflow({
             {booking.customerFormCompletedAt ? (
               <span className="text-emerald-700">Completed</span>
             ) : (
-              <span className="text-amber-700">Pending</span>
+              <span className="text-amber-700">Pending — required before vehicle assignment</span>
             )}
           </p>
-          {canSendAgreement && (
-            <div className="mt-3 space-y-2 border-t border-border pt-3">
-              <Button
-                type="button"
-                disabled={pending}
-                onClick={() => {
-                  startTransition(async () => {
-                    try {
-                      const result = await sendAgreementEmailAction(booking.id);
-                      setAgreementUrl(result.agreementUrl);
-                      toast({
-                        type: "success",
-                        message: `Agreement email sent to ${booking.customerEmail}`,
-                      });
-                      window.location.reload();
-                    } catch (err) {
-                      toast({
-                        type: "error",
-                        message:
-                          err instanceof Error ? err.message : "Failed to send agreement email",
-                      });
-                    }
-                  });
-                }}
-              >
-                {pending ? <LoadingLabel label="Sending..." /> : "Send Agreement Email"}
-              </Button>
-              {agreementUrl && (
-                <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground">Customer form link</p>
-                  <a
-                    href={agreementUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="block break-all text-xs text-primary hover:underline"
-                  >
-                    {agreementUrl}
-                  </a>
+          {agreementPending && (
+            <div className="mt-3 space-y-3 border-t border-border pt-3">
+              <p className="text-xs text-amber-900">
+                Vehicle assignment stays locked until the rental agreement is completed. Email the
+                customer form, or complete it here for walk-in customers.
+              </p>
+              {canSendAgreement && (
+                <div className="space-y-2">
                   <Button
                     type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(agreementUrl);
-                        toast({ type: "success", message: "Link copied" });
-                      } catch {
-                        toast({ type: "error", message: "Could not copy link" });
-                      }
+                    disabled={pending}
+                    onClick={() => {
+                      startTransition(async () => {
+                        try {
+                          const result = await sendAgreementEmailAction(booking.id);
+                          setAgreementUrl(result.agreementUrl);
+                          toast({
+                            type: "success",
+                            message: `Agreement email sent to ${booking.customerEmail}`,
+                          });
+                          window.location.reload();
+                        } catch (err) {
+                          toast({
+                            type: "error",
+                            message:
+                              err instanceof Error ? err.message : "Failed to send agreement email",
+                          });
+                        }
+                      });
                     }}
                   >
-                    Copy link
+                    {pending ? <LoadingLabel label="Sending..." /> : "Send Agreement Email"}
                   </Button>
+                  {agreementUrl && (
+                    <a
+                      href={agreementUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="block break-all text-xs text-primary hover:underline"
+                    >
+                      {agreementUrl}
+                    </a>
+                  )}
                 </div>
               )}
+
+              <div className="rounded-lg border border-dashed border-border p-3 space-y-3">
+                <p className="text-sm font-medium">Complete agreement in office</p>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div>
+                    <Label>Licence number *</Label>
+                    <Input
+                      value={officeLicence}
+                      onChange={(e) => setOfficeLicence(e.target.value)}
+                      placeholder="Licence no."
+                    />
+                  </div>
+                  <div>
+                    <Label>Licence expiry</Label>
+                    <Input
+                      type="date"
+                      value={officeLicenceExpiry}
+                      onChange={(e) => setOfficeLicenceExpiry(e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <Label>Licence image *</Label>
+                    <Input
+                      type="file"
+                      accept="image/*,application/pdf"
+                      disabled={officeUploading}
+                      onChange={async (event) => {
+                        const file = event.target.files?.[0];
+                        if (!file) return;
+                        setOfficeUploading(true);
+                        try {
+                          const body = new FormData();
+                          body.append("file", file);
+                          const res = await fetch("/api/uploads/licence", { method: "POST", body });
+                          const json = await res.json();
+                          if (!res.ok) throw new Error(json.error || "Upload failed");
+                          setOfficeLicencePhotoUrl(json.url);
+                          toast({ type: "success", message: "Licence image uploaded" });
+                        } catch (err) {
+                          toast({
+                            type: "error",
+                            message: err instanceof Error ? err.message : "Upload failed",
+                          });
+                        } finally {
+                          setOfficeUploading(false);
+                        }
+                      }}
+                    />
+                    {officeLicencePhotoUrl && (
+                      <p className="mt-1 text-xs text-emerald-700">Image uploaded</p>
+                    )}
+                  </div>
+                  <div>
+                    <Label>Signature (type full name) *</Label>
+                    <Input
+                      value={officeSignature}
+                      onChange={(e) => setOfficeSignature(e.target.value)}
+                      placeholder={booking.customerName ?? "Full name"}
+                    />
+                  </div>
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={
+                    pending ||
+                    officeUploading ||
+                    !officeLicence.trim() ||
+                    !officeLicencePhotoUrl ||
+                    !officeSignature.trim()
+                  }
+                  onClick={() => {
+                    startTransition(async () => {
+                      try {
+                        await completeAgreementInOfficeAction(booking.id, {
+                          drivingLicenceNumber: officeLicence,
+                          licencePhotoUrl: officeLicencePhotoUrl,
+                          licenceExpiry: officeLicenceExpiry || undefined,
+                          signatureText: officeSignature,
+                        });
+                        toast({
+                          type: "success",
+                          message: "Agreement completed. You can assign a vehicle next.",
+                        });
+                        window.location.reload();
+                      } catch (err) {
+                        toast({
+                          type: "error",
+                          message:
+                            err instanceof Error ? err.message : "Failed to complete agreement",
+                        });
+                      }
+                    });
+                  }}
+                >
+                  {pending ? (
+                    <LoadingLabel label="Saving..." />
+                  ) : (
+                    "Mark agreement complete"
+                  )}
+                </Button>
+              </div>
             </div>
           )}
         </div>
@@ -338,12 +492,31 @@ export default function AdminBookingWorkflow({
         </div>
       </section>
 
-      {(booking.status === "WAITING_FOR_VEHICLE_ASSIGNMENT" ||
-        booking.status === "READY_FOR_PICKUP" ||
-        booking.status === "CONFIRMED") &&
-        booking.customerFormCompletedAt && (
+      {statusReadyForPickup && !pickupDay && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Vehicle assignment and pickup open on the pickup day (
+          {format(new Date(booking.pickupAt), "dd MMM yyyy")}).
+        </section>
+      )}
+
+      {showPickupPanel && (
           <section className="rounded-xl border border-border bg-card p-4 space-y-4">
-            <h2 className="font-semibold">Vehicle Assignment & Pickup</h2>
+            <h2 className="font-semibold">
+              {needsPdfRetry
+                ? "Regenerate Agreement PDF"
+                : "Vehicle Assignment & Pickup"}
+            </h2>
+            {needsPdfRetry ? (
+              <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                Vehicle is already assigned, but the agreement PDF did not generate. Submit again to
+                create and email the PDF.
+              </p>
+            ) : (
+              <p className="text-sm text-muted-foreground">
+                Enter VIN, registration, colour, fuel and KM for this unit. Values are saved on the
+                fleet vehicle and auto-filled next time.
+              </p>
+            )}
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="sm:col-span-2">
                 <Label>Select fleet vehicle</Label>
@@ -364,11 +537,12 @@ export default function AdminBookingWorkflow({
 
               {selectedFleet && (
                 <>
+                  <ReadOnly label="Fleet #" value={selectedFleet.fleetNumber} />
                   <ReadOnly label="Year" value={String(selectedFleet.year ?? selectedFleet.vehicle.year)} />
-                  <ReadOnly label="Make" value={selectedFleet.vehicle.make} />
-                  <ReadOnly label="Model" value={selectedFleet.vehicle.model} />
-                  <ReadOnly label="Registration" value={selectedFleet.registrationNumber ?? "—"} />
-                  <ReadOnly label="VIN" value={selectedFleet.vinNumber ?? "—"} />
+                  <ReadOnly
+                    label="Make / Model"
+                    value={`${selectedFleet.vehicle.make} ${selectedFleet.vehicle.model}`}
+                  />
                   <ReadOnly
                     label="Fuel Type"
                     value={selectedFleet.fuelType ?? selectedFleet.vehicle.fuelType}
@@ -377,52 +551,73 @@ export default function AdminBookingWorkflow({
                     label="Transmission"
                     value={selectedFleet.transmission ?? selectedFleet.vehicle.transmission}
                   />
-                  <ReadOnly
-                    label="Colour"
-                    value={selectedFleet.color ?? selectedFleet.vehicle.color ?? "—"}
-                  />
-                  <ReadOnly
-                    label="Current KM"
-                    value={String(selectedFleet.currentKm ?? selectedFleet.odometer ?? "—")}
-                  />
-                  <ReadOnly
-                    label="Current Fuel"
-                    value={selectedFleet.currentFuelLevel ?? "—"}
-                  />
+
+                  <div>
+                    <Label>Registration *</Label>
+                    <Input
+                      value={registrationNumber}
+                      onChange={(e) => setRegistrationNumber(e.target.value)}
+                      placeholder="e.g. CG57VM"
+                      className="uppercase"
+                    />
+                  </div>
+                  <div>
+                    <Label>VIN *</Label>
+                    <Input
+                      value={vinNumber}
+                      onChange={(e) => setVinNumber(e.target.value)}
+                      placeholder="Vehicle identification number"
+                      className="uppercase"
+                    />
+                  </div>
+                  <div>
+                    <Label>Colour *</Label>
+                    <Input
+                      value={fleetColor}
+                      onChange={(e) => setFleetColor(e.target.value)}
+                      placeholder="e.g. White"
+                    />
+                  </div>
+                  <div>
+                    <Label>Current fuel *</Label>
+                    <Select value={fuelOut} onValueChange={setFuelOut}>
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {FUEL_LEVELS.map((level) => (
+                          <SelectItem key={level} value={level}>
+                            {level}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div>
+                    <Label>Current KM *</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={kmOut}
+                      onChange={(e) => onCurrentKmChange(Number(e.target.value))}
+                    />
+                  </div>
+                  <div>
+                    <Label>Expected KM</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      value={expectedKmIn}
+                      onChange={(e) => setExpectedKmIn(Number(e.target.value))}
+                    />
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Auto: current KM + daily limit × {Math.max(1, booking.rentalDays)} day
+                      {booking.rentalDays === 1 ? "" : "s"}
+                    </p>
+                  </div>
                 </>
               )}
 
-              <div>
-                <Label>KM Out</Label>
-                <Input
-                  type="number"
-                  value={kmOut}
-                  onChange={(e) => setKmOut(Number(e.target.value))}
-                />
-              </div>
-              <div>
-                <Label>Expected KM In</Label>
-                <Input
-                  type="number"
-                  value={expectedKmIn}
-                  onChange={(e) => setExpectedKmIn(Number(e.target.value))}
-                />
-              </div>
-              <div>
-                <Label>Fuel Level Out</Label>
-                <Select value={fuelOut} onValueChange={setFuelOut}>
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {FUEL_LEVELS.map((level) => (
-                      <SelectItem key={level} value={level}>
-                        {level}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
               <div>
                 <Label>Time Out</Label>
                 <Input type="datetime-local" value={timeOut} onChange={(e) => setTimeOut(e.target.value)} />
@@ -436,11 +631,13 @@ export default function AdminBookingWorkflow({
                 />
               </div>
               <div>
-                <Label>Daily Rate (cents)</Label>
+                <Label>Daily Rate (AUD $)</Label>
                 <Input
                   type="number"
-                  value={dailyRateCents}
-                  onChange={(e) => setDailyRateCents(Number(e.target.value))}
+                  min={0}
+                  step="0.01"
+                  value={dailyRateDollars}
+                  onChange={(e) => setDailyRateDollars(Number(e.target.value))}
                 />
               </div>
               <div>
@@ -448,23 +645,27 @@ export default function AdminBookingWorkflow({
                 <Input
                   type="number"
                   value={dailyLimitKm}
-                  onChange={(e) => setDailyLimitKm(Number(e.target.value))}
+                  onChange={(e) => onDailyLimitChange(Number(e.target.value))}
                 />
               </div>
               <div>
-                <Label>Excess KM Rate (cents)</Label>
+                <Label>Excess KM Rate (AUD $)</Label>
                 <Input
                   type="number"
-                  value={excessKmRateCents}
-                  onChange={(e) => setExcessKmRateCents(Number(e.target.value))}
+                  min={0}
+                  step="0.01"
+                  value={excessKmRateDollars}
+                  onChange={(e) => setExcessKmRateDollars(Number(e.target.value))}
                 />
               </div>
               <div>
-                <Label>Bond (cents)</Label>
+                <Label>Bond (AUD $)</Label>
                 <Input
                   type="number"
-                  value={bondCents}
-                  onChange={(e) => setBondCents(Number(e.target.value))}
+                  min={0}
+                  step="0.01"
+                  value={bondDollars}
+                  onChange={(e) => setBondDollars(Number(e.target.value))}
                 />
               </div>
               <div className="sm:col-span-2">
@@ -478,26 +679,41 @@ export default function AdminBookingWorkflow({
             </div>
             <SignaturePad label="Admin signature" onChange={setAdminPickupSig} />
             <Button
-              disabled={pending || !fleetVehicleId || !adminPickupSig}
+              disabled={
+                pending ||
+                !fleetVehicleId ||
+                !adminPickupSig ||
+                !registrationNumber.trim() ||
+                !vinNumber.trim() ||
+                !fleetColor.trim()
+              }
               onClick={() => {
                 startTransition(async () => {
                   try {
                     await assignAndPickupAction(booking.id, {
                       fleetVehicleId,
+                      registrationNumber: registrationNumber.trim(),
+                      vinNumber: vinNumber.trim(),
+                      color: fleetColor.trim(),
                       kmOut,
                       expectedKmIn,
                       fuelOut,
                       timeOut: new Date(timeOut).toISOString(),
                       expectedReturnAt: new Date(expectedReturnAt).toISOString(),
-                      dailyRateCents,
+                      dailyRateCents: dollarsToCents(dailyRateDollars),
                       dailyLimitKm,
-                      excessKmRateCents,
-                      bondCents,
+                      excessKmRateCents: dollarsToCents(excessKmRateDollars),
+                      bondCents: dollarsToCents(bondDollars),
                       insuranceNotes,
                       notes: pickupNotes,
                       adminSignatureDataUrl: adminPickupSig,
                     });
-                    toast({ type: "success", message: "Pickup completed. PDF sent to customer." });
+                    toast({
+                      type: "success",
+                      message: needsPdfRetry
+                        ? "Agreement PDF generated and sent."
+                        : "Pickup completed. PDF sent to customer.",
+                    });
                     window.location.reload();
                   } catch (err) {
                     toast({
@@ -509,15 +725,26 @@ export default function AdminBookingWorkflow({
               }}
             >
               {pending ? (
-                <LoadingLabel label="Completing pickup..." />
+                <LoadingLabel
+                  label={needsPdfRetry ? "Generating PDF..." : "Completing pickup..."}
+                />
+              ) : needsPdfRetry ? (
+                "Regenerate & Send PDF"
               ) : (
                 "Complete Pickup & Generate PDF"
               )}
             </Button>
           </section>
-        )}
+      )}
 
-      {booking.status === "ACTIVE" && (
+      {booking.status === "ACTIVE" && !returnDay && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Return checklist opens on the return day (
+          {format(new Date(booking.expectedReturnAt ?? booking.dropoffAt), "dd MMM yyyy")}).
+        </section>
+      )}
+
+      {showReturnPanel && (
         <section className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h2 className="font-semibold">Return Vehicle</h2>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -552,11 +779,13 @@ export default function AdminBookingWorkflow({
               />
             </div>
             <div>
-              <Label>Damage Charge (cents)</Label>
+              <Label>Damage Charge (AUD $)</Label>
               <Input
                 type="number"
-                value={damageChargeCents}
-                onChange={(e) => setDamageChargeCents(Number(e.target.value))}
+                min={0}
+                step="0.01"
+                value={damageChargeDollars}
+                onChange={(e) => setDamageChargeDollars(Number(e.target.value))}
               />
             </div>
             <div className="sm:col-span-2">
@@ -613,7 +842,7 @@ export default function AdminBookingWorkflow({
                     returnedAt: new Date(returnedAt).toISOString(),
                     damageNotes,
                     damagePhotoUrls,
-                    damageChargeCents,
+                    damageChargeCents: dollarsToCents(damageChargeDollars),
                     accessoriesChecklist: {
                       spareTyre: true,
                       jack: true,
@@ -637,7 +866,14 @@ export default function AdminBookingWorkflow({
         </section>
       )}
 
-      {(booking.status === "RETURNED" || booking.status === "AWAITING_PAYMENT") && (
+      {(booking.status === "RETURNED" || booking.status === "AWAITING_PAYMENT") && !returnDay && (
+        <section className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Settlement opens on the return day (
+          {format(new Date(booking.expectedReturnAt ?? booking.dropoffAt), "dd MMM yyyy")}).
+        </section>
+      )}
+
+      {showSettlementPanel && (
         <section className="rounded-xl border border-border bg-card p-4 space-y-4">
           <h2 className="font-semibold">Payment Summary</h2>
           <div className="text-sm space-y-1">

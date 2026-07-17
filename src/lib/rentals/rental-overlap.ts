@@ -168,6 +168,7 @@ export async function claimRentalBookingPayment(bookingId: string) {
         paymentStatus: RentalPaymentStatus.PAID,
         status: RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM,
         paidAt: new Date(),
+        paymentMethod: booking.paymentMethod || "STRIPE",
         agreementToken: token,
         agreementTokenExpiresAt: addDays(new Date(), 30),
       },

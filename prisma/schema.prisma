@@ -479,6 +479,8 @@ model RentalBooking {
   selectedOptions      Json?
   currency             String              @default("aud")
   paymentStatus        RentalPaymentStatus @default(UNPAID)
+  /// How the booking was paid: CASH | POS | STRIPE (admin/office or online).
+  paymentMethod        String?
   stripeCheckoutSessionId String?          @unique
   stripePaymentIntentId   String?
   paidAt               DateTime?

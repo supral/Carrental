@@ -44,7 +44,7 @@ export async function createRentalBookingRequest(payload: {
   customerEmail: string;
   customerPhone: string;
   customerAddress: string;
-  customerZip: string;
+  customerZip?: string;
   customerDob: string;
   customerCountry: string;
   drivingLicenceNumber?: string;

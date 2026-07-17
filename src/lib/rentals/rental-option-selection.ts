@@ -32,7 +32,7 @@ export function buildInitialRentalOptionSelections(
   options: VehicleRentalOptionConfig[]
 ): RentalOptionSelections {
   const state: RentalOptionSelections = {
-    [NO_PROTECTION_OPTION_TYPE]: { selected: false, quantity: 1 },
+    [NO_PROTECTION_OPTION_TYPE]: { selected: true, quantity: 1 },
   };
   for (const option of options) {
     state[String(option.type)] = {

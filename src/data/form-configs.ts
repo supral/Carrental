@@ -53,7 +53,6 @@ export const formConfigs: Record<FormType, { title: string; subtitle: string; fi
       { name: "email", label: "Email", type: "email", required: true, placeholder: "john@email.com" },
       { name: "phone", label: "Phone", type: "tel", required: true, placeholder: "04XX XXX XXX" },
       { name: "address", label: "Address", type: "text", required: true, placeholder: "Street address" },
-      { name: "zip", label: "ZIP / Postcode", type: "text", required: true, placeholder: "e.g. 0800" },
       { name: "dob", label: "Date of Birth", type: "date", required: true },
       { name: "country", label: "Country", type: "text", required: true, placeholder: "Australia" },
       {

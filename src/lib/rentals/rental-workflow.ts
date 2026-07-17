@@ -1,3 +1,4 @@
+import { isSameDay, startOfDay } from "date-fns";
 import { RentalBookingStatus, RentalPaymentStatus } from "@prisma/client";
 
 export type WorkflowDisplayStatus =
@@ -110,4 +111,41 @@ export function getWorkflowTimelineIndex(status: RentalBookingStatus | string): 
   if (idx >= 0) return idx;
   if (status === RentalBookingStatus.RESERVED) return 0;
   return 0;
+}
+
+/** Agreement + assignment + pickup are only actionable on the scheduled pickup calendar day. */
+export function isWorkflowPickupDay(pickupAt: Date | string, now = new Date()): boolean {
+  return isSameDay(new Date(pickupAt), now);
+}
+
+/**
+ * Return / settlement steps open from the scheduled return calendar day onward
+ * (expected return if set, otherwise drop-off).
+ */
+export function isWorkflowReturnDay(
+  dropoffAt: Date | string,
+  expectedReturnAt?: Date | string | null,
+  now = new Date()
+): boolean {
+  const scheduled = expectedReturnAt ? new Date(expectedReturnAt) : new Date(dropoffAt);
+  return now.getTime() >= startOfDay(scheduled).getTime();
+}
+
+export function assertWorkflowPickupDay(pickupAt: Date | string) {
+  if (!isWorkflowPickupDay(pickupAt)) {
+    throw new Error(
+      "Agreement and pickup actions are only available on the scheduled pickup day."
+    );
+  }
+}
+
+export function assertWorkflowReturnDay(
+  dropoffAt: Date | string,
+  expectedReturnAt?: Date | string | null
+) {
+  if (!isWorkflowReturnDay(dropoffAt, expectedReturnAt)) {
+    throw new Error(
+      "Return and settlement actions are only available on or after the scheduled return day."
+    );
+  }
 }

@@ -102,12 +102,14 @@ export interface CreateRentalBookingInput {
   customerEmail: string;
   customerPhone: string;
   customerAddress: string;
-  customerZip: string;
+  customerZip?: string | null;
   customerDob: Date;
   customerCountry: string;
   drivingLicenceNumber?: string;
   licencePhotoUrl?: string;
   notes?: string;
+  /** CASH | POS | STRIPE — optional; set on admin bookings */
+  paymentMethod?: "CASH" | "POS" | "STRIPE" | null;
   selectedOptions?: import("@/lib/rentals/option-catalog").SelectedRentalOptionInput[];
 }
 
@@ -169,7 +171,7 @@ export async function createRentalBooking(input: CreateRentalBookingInput) {
         customerEmail: input.customerEmail,
         customerPhone: input.customerPhone,
         customerAddress: input.customerAddress,
-        customerZip: input.customerZip,
+        customerZip: input.customerZip?.trim() || null,
         customerDob: input.customerDob,
         customerCountry: input.customerCountry,
         drivingLicenceNumber: input.drivingLicenceNumber || null,
@@ -184,6 +186,7 @@ export async function createRentalBooking(input: CreateRentalBookingInput) {
         currency: "aud",
         status: RentalBookingStatus.PENDING,
         paymentStatus: RentalPaymentStatus.UNPAID,
+        paymentMethod: input.paymentMethod ?? null,
       },
     });
   }, RENTAL_TRANSACTION_OPTIONS);
@@ -260,7 +263,7 @@ export async function createAndConfirmRentalBooking(input: CreateRentalBookingIn
         customerEmail: input.customerEmail,
         customerPhone: input.customerPhone,
         customerAddress: input.customerAddress,
-        customerZip: input.customerZip,
+        customerZip: input.customerZip?.trim() || null,
         customerDob: input.customerDob,
         customerCountry: input.customerCountry,
         drivingLicenceNumber: input.drivingLicenceNumber || null,
@@ -275,6 +278,7 @@ export async function createAndConfirmRentalBooking(input: CreateRentalBookingIn
         currency: "aud",
         status: RentalBookingStatus.PENDING,
         paymentStatus: RentalPaymentStatus.UNPAID,
+        paymentMethod: input.paymentMethod ?? null,
       },
     });
 
@@ -288,6 +292,7 @@ export async function createAndConfirmRentalBooking(input: CreateRentalBookingIn
         paymentStatus: RentalPaymentStatus.PAID,
         status: RentalBookingStatus.WAITING_FOR_CUSTOMER_FORM,
         paidAt: new Date(),
+        paymentMethod: input.paymentMethod ?? created.paymentMethod,
         agreementToken,
         agreementTokenExpiresAt: addDays(new Date(), 30),
       },

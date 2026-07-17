@@ -67,6 +67,7 @@ export default function CreateRentalBookingForm({
 
   const [vehicleId, setVehicleId] = useState(initialVehicleId ?? vehicles[0]?.id ?? "");
   const [bookingSource, setBookingSource] = useState<"walk_in" | "phone" | "other">("walk_in");
+  const [paymentMethod, setPaymentMethod] = useState<"CASH" | "POS" | "STRIPE">("POS");
   const [pickupAddress, setPickupAddress] = useState(DEFAULT_RENTAL_ADDRESS);
   const [dropoffAddress, setDropoffAddress] = useState(DEFAULT_RENTAL_ADDRESS);
   const [pickupDate, setPickupDate] = useState(initialPickupDate ?? "");
@@ -226,7 +227,6 @@ export default function CreateRentalBookingForm({
           customerEmail: get("customerEmail"),
           customerPhone: get("customerPhone"),
           customerAddress: get("customerAddress"),
-          customerZip: get("customerZip"),
           customerDob: get("customerDob"),
           customerCountry: get("customerCountry") || "Australia",
           drivingLicenceNumber: get("drivingLicenceNumber") || undefined,
@@ -241,14 +241,24 @@ export default function CreateRentalBookingForm({
           acceptDamagePolicy: terms.damagePolicy,
           notes: get("notes") || undefined,
           bookingSource,
+          paymentMethod,
           selectedOptions: rentalSelectionsToPayload(selections),
         });
+
+        if (result.checkoutUrl) {
+          toast({
+            type: "success",
+            message: `Booking created (${formatPrice(result.totalAmountCents / 100)}). Opening Stripe Checkout…`,
+          });
+          window.location.href = result.checkoutUrl;
+          return;
+        }
 
         toast({
           type: "success",
           message: result.agreementCompletedInOffice
-            ? `Booking created and agreement completed (${formatPrice(result.totalAmountCents / 100)}). Confirmation emailed.`
-            : `Booking created (${formatPrice(result.totalAmountCents / 100)}). Confirmation and agreement emails sent.`,
+            ? `Booking created & paid via ${paymentMethod === "CASH" ? "Cash" : "POS"} (${formatPrice(result.totalAmountCents / 100)}). Confirmation emailed.`
+            : `Booking created & paid via ${paymentMethod === "CASH" ? "Cash" : "POS"} (${formatPrice(result.totalAmountCents / 100)}). Confirmation and agreement emails sent.`,
         });
         router.push(`/admin/bookings/${result.id}`);
         router.refresh();
@@ -315,6 +325,30 @@ export default function CreateRentalBookingForm({
                   <SelectItem value="other">Other</SelectItem>
                 </SelectContent>
               </Select>
+            </div>
+
+            <div>
+              <Label className="mb-1.5 block">Payment method *</Label>
+              <Select
+                value={paymentMethod}
+                onValueChange={(value) => setPaymentMethod(value as "CASH" | "POS" | "STRIPE")}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="POS">POS (card terminal)</SelectItem>
+                  <SelectItem value="CASH">Cash</SelectItem>
+                  <SelectItem value="STRIPE">Stripe (online checkout)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="mt-1.5 text-xs text-muted-foreground">
+                {paymentMethod === "STRIPE"
+                  ? "Creates an unpaid booking and opens Stripe Checkout for the customer."
+                  : paymentMethod === "POS"
+                    ? "Marks the booking paid after card is taken on the POS terminal."
+                    : "Marks the booking paid for cash received in office."}
+              </p>
             </div>
           </div>
 
@@ -418,12 +452,6 @@ export default function CreateRentalBookingForm({
               <Input id="customerAddress" name="customerAddress" required />
             </div>
             <div>
-              <Label htmlFor="customerZip" className="mb-1.5 block">
-                Postcode *
-              </Label>
-              <Input id="customerZip" name="customerZip" required />
-            </div>
-            <div>
               <Label htmlFor="customerDob" className="mb-1.5 block">
                 Date of birth *
               </Label>
@@ -439,8 +467,9 @@ export default function CreateRentalBookingForm({
             <div className="sm:col-span-2 border-t border-border pt-4">
               <h3 className="font-semibold">Rental agreement (office / walk-in)</h3>
               <p className="mt-1 text-sm text-muted-foreground">
-                Fill these if the customer cannot complete the online form. Leave blank to email them
-                the agreement link instead.
+                Leave <span className="font-medium">Licence number</span> empty to email the
+                customer the agreement form link. Or fill licence, image, signature, and all terms
+                to complete the agreement in office (no agreement email).
               </p>
             </div>
 
@@ -554,7 +583,19 @@ export default function CreateRentalBookingForm({
             <Link href="/admin/bookings">Cancel</Link>
           </Button>
           <Button type="submit" disabled={isPending || !vehicleId || !canBook || !protectionChosen}>
-            {isPending ? <LoadingLabel label="Creating booking..." /> : "Create booking"}
+            {isPending ? (
+              <LoadingLabel
+                label={
+                  paymentMethod === "STRIPE" ? "Opening Stripe..." : "Creating booking..."
+                }
+              />
+            ) : paymentMethod === "STRIPE" ? (
+              "Create & pay with Stripe"
+            ) : paymentMethod === "POS" ? (
+              "Create & mark paid (POS)"
+            ) : (
+              "Create & mark paid (Cash)"
+            )}
           </Button>
         </div>
       </div>

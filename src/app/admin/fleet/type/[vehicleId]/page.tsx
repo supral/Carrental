@@ -46,7 +46,8 @@ export default async function FleetTypeHistoryPage({
         <div>
           <h1 className="text-2xl font-bold">{vehicle.title}</h1>
           <p className="text-muted-foreground">
-            Every physical unit under this vehicle type
+            {stats.fleetSize} physical unit{stats.fleetSize === 1 ? "" : "s"} under this vehicle type
+            (each has its own Fleet #)
             {vehicle.make && vehicle.make !== "Rental"
               ? ` · ${vehicle.make} ${vehicle.model}`
               : ""}

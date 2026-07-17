@@ -174,7 +174,6 @@ export default function RentalBookingFlow({
         customerEmail: data.email,
         customerPhone: data.phone,
         customerAddress: data.address,
-        customerZip: data.zip,
         customerDob: data.dob,
         customerCountry: data.country,
         notes: data.message,
@@ -209,7 +208,7 @@ export default function RentalBookingFlow({
         <div className="space-y-8">
         <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
           <p className="text-sm font-semibold uppercase tracking-wide text-primary">Your trip</p>
-          <div className="mt-4 space-y-5">
+          <div className="mt-4 grid grid-cols-1 gap-5 md:grid-cols-2 md:gap-6">
             <div>
               <p className="mb-1 text-sm font-medium text-gray-900">Pickup</p>
               <p className="mb-3 text-sm text-gray-600">{trip.pickupAddress}</p>
@@ -273,7 +272,7 @@ export default function RentalBookingFlow({
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
-            <div className="sm:col-span-2">
+            <div>
               <label htmlFor="name" className="mb-1 block text-sm font-medium text-gray-700">
                 Full Name <span className="text-primary">*</span>
               </label>
@@ -291,30 +290,6 @@ export default function RentalBookingFlow({
               </label>
               <input id="phone" name="phone" type="tel" required className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
             </div>
-            <div className="sm:col-span-2">
-              <label htmlFor="address" className="mb-1 block text-sm font-medium text-gray-700">
-                Address <span className="text-primary">*</span>
-              </label>
-              <input
-                id="address"
-                name="address"
-                required
-                placeholder="Street address"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
-            <div>
-              <label htmlFor="zip" className="mb-1 block text-sm font-medium text-gray-700">
-                ZIP / Postcode <span className="text-primary">*</span>
-              </label>
-              <input
-                id="zip"
-                name="zip"
-                required
-                placeholder="e.g. 0800"
-                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
-              />
-            </div>
             <div>
               <label htmlFor="dob" className="mb-1 block text-sm font-medium text-gray-700">
                 Date of Birth <span className="text-primary">*</span>
@@ -328,7 +303,19 @@ export default function RentalBookingFlow({
                 className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
-            <div className="sm:col-span-2">
+            <div>
+              <label htmlFor="address" className="mb-1 block text-sm font-medium text-gray-700">
+                Address <span className="text-primary">*</span>
+              </label>
+              <input
+                id="address"
+                name="address"
+                required
+                placeholder="Street address"
+                className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
+              />
+            </div>
+            <div>
               <label htmlFor="country" className="mb-1 block text-sm font-medium text-gray-700">
                 Country <span className="text-primary">*</span>
               </label>
@@ -341,13 +328,12 @@ export default function RentalBookingFlow({
                 className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"
               />
             </div>
-          </div>
-
-          <div>
-            <label htmlFor="message" className="mb-1 block text-sm font-medium text-gray-700">
-              Additional Notes
-            </label>
-            <textarea id="message" name="message" rows={3} className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            <div className="sm:col-span-2">
+              <label htmlFor="message" className="mb-1 block text-sm font-medium text-gray-700">
+                Additional Notes
+              </label>
+              <textarea id="message" name="message" rows={3} className="w-full rounded-xl border border-gray-300 px-4 py-3 text-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/20" />
+            </div>
           </div>
 
           {error && (
