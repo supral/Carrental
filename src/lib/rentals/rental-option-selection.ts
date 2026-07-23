@@ -40,6 +40,33 @@ export function buildInitialRentalOptionSelections(
       quantity: 1,
     };
   }
+
+  const insurance = options.filter((option) => getOptionCategory(option) === "insurance");
+  const byLabel = insurance.find((option) => {
+    const label = getOptionLabel(option).toLowerCase();
+    const type = String(option.type).toLowerCase();
+    return (
+      type.includes("noprotection") ||
+      type.includes("no_protection") ||
+      type.includes("without") ||
+      label.includes("without protection") ||
+      label.includes("no protection") ||
+      label.includes("book without")
+    );
+  });
+  const preferred = byLabel ?? insurance.find((option) => (option.price ?? 0) === 0);
+
+  if (preferred) {
+    const key = String(preferred.type);
+    state[NO_PROTECTION_OPTION_TYPE] = { selected: false, quantity: 1 };
+    for (const option of insurance) {
+      state[String(option.type)] = {
+        selected: String(option.type) === key,
+        quantity: 1,
+      };
+    }
+  }
+
   return state;
 }
 
