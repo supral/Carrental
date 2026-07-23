@@ -3,25 +3,16 @@ import { format } from "date-fns";
 import { promises as fs } from "fs";
 import { createHash, randomBytes } from "crypto";
 import QRCode from "qrcode";
-import { siteConfig } from "@/data/services";
+import {
+  getRentalBrand,
+  resolveBookingRentalChannel,
+  type RentalBrandConfig,
+  type RentalChannel,
+} from "@/lib/rentals/rental-brand";
 import { publicUrlToAbsolutePath, saveBinaryUpload } from "@/lib/uploads/rental-file-storage";
+import { getAppBaseUrl } from "@/lib/stripe";
 
-export const AGREEMENT_PDF_VERSION = "2.0";
-
-function resolveAppBaseUrl(): string {
-  const candidates = [
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.AUTH_URL,
-    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-  ];
-  for (const value of candidates) {
-    if (!value?.trim()) continue;
-    const normalized = value.trim().replace(/\/$/, "");
-    if (normalized.startsWith("http://") || normalized.startsWith("https://")) return normalized;
-    return `https://${normalized}`;
-  }
-  return siteConfig.websiteUrl || "https://www.everestcarrental.com";
-}
+export const AGREEMENT_PDF_VERSION = "2.3";
 
 const PAGE_W = 595.28;
 const PAGE_H = 841.89;
@@ -29,16 +20,37 @@ const MARGIN = 42;
 const CONTENT_W = PAGE_W - MARGIN * 2;
 /** Keep body content above the QR/footer band */
 const FOOTER_SAFE_Y = 58;
-const BRAND = rgb(0.039, 0.302, 0.549); // #0A4D8C
-const BRAND_LIGHT = rgb(0.9, 0.94, 0.97);
 const INK = rgb(0.08, 0.1, 0.14);
 const MUTED = rgb(0.35, 0.38, 0.42);
 const LINE = rgb(0.82, 0.85, 0.88);
 const CARD_BG = rgb(0.97, 0.98, 0.99);
-const HEADING_BG = rgb(0.93, 0.95, 0.97);
-const TOTAL_BG = rgb(0.92, 0.96, 1);
 const WHITE = rgb(1, 1, 1);
-const STAMP_BLUE = rgb(0.05, 0.28, 0.55);
+
+type PdfPalette = {
+  primary: ReturnType<typeof rgb>;
+  accent: ReturnType<typeof rgb>;
+  primaryLight: ReturnType<typeof rgb>;
+  totalBg: ReturnType<typeof rgb>;
+  sectionBg: ReturnType<typeof rgb>;
+};
+
+function hexToRgb(hex: string) {
+  const normalized = hex.replace("#", "");
+  const r = parseInt(normalized.slice(0, 2), 16) / 255;
+  const g = parseInt(normalized.slice(2, 4), 16) / 255;
+  const b = parseInt(normalized.slice(4, 6), 16) / 255;
+  return rgb(r, g, b);
+}
+
+function buildPdfPalette(brand: RentalBrandConfig): PdfPalette {
+  return {
+    primary: hexToRgb(brand.colors.primary),
+    accent: hexToRgb(brand.colors.accent),
+    primaryLight: hexToRgb(brand.colors.primaryLight),
+    totalBg: hexToRgb(brand.colors.totalBg),
+    sectionBg: hexToRgb(brand.colors.sectionBg),
+  };
+}
 
 export type AgreementPdfDriver = {
   isPrimary: boolean;
@@ -52,6 +64,7 @@ export type AgreementPdfDriver = {
 
 export type AgreementPdfInput = {
   bookingId: string;
+  rentalChannel?: RentalChannel | string | null;
   companyName: string;
   companyEmail: string;
   companyPhone: string;
@@ -95,7 +108,9 @@ type Fonts = { regular: PDFFont; bold: PDFFont };
 
 type Theme = {
   fonts: Fonts;
-  logo: PDFImage | null;
+  brand: RentalBrandConfig;
+  palette: PdfPalette;
+  emblem: PDFImage | null;
   watermark: PDFImage | null;
   qr: PDFImage | null;
   agreementNumber: string;
@@ -114,11 +129,11 @@ function vehicleDisplayName(vehicle: AgreementPdfInput["vehicle"]): string {
   return `${vehicle.year ?? ""} ${vehicle.make} ${vehicle.model}`.replace(/\s+/g, " ").trim();
 }
 
-function buildAgreementNumber(bookingId: string): string {
+function buildAgreementNumber(bookingId: string, prefix: string): string {
   const stamp = format(new Date(), "yyyyMMdd");
   const short = bookingId.replace(/[^a-zA-Z0-9]/g, "").slice(-6).toUpperCase() || "XXXXXX";
   const salt = randomBytes(2).toString("hex").toUpperCase();
-  return `ECR-${stamp}-${short}-${salt}`;
+  return `${prefix}-${stamp}-${short}-${salt}`;
 }
 
 function sniffImageKind(bytes: Buffer): "png" | "jpg" | "other" {
@@ -158,12 +173,12 @@ async function tryEmbedImage(pdf: PDFDocument, url: string | null | undefined) {
   }
 }
 
-async function embedQrCode(pdf: PDFDocument, url: string) {
+async function embedQrCode(pdf: PDFDocument, url: string, darkColor: string) {
   const dataUrl = await QRCode.toDataURL(url, {
     margin: 1,
     width: 180,
     errorCorrectionLevel: "M",
-    color: { dark: "#0A4D8C", light: "#FFFFFF" },
+    color: { dark: darkColor, light: "#FFFFFF" },
   });
   const base64 = dataUrl.replace(/^data:image\/png;base64,/, "");
   return pdf.embedPng(Buffer.from(base64, "base64"));
@@ -205,7 +220,7 @@ function drawCard(
   });
 }
 
-function drawSectionHeading(page: PDFPage, fonts: Fonts, title: string, yTop: number): number {
+function drawSectionHeading(page: PDFPage, theme: Theme, title: string, yTop: number): number {
   const h = 22;
   const yBottom = yTop - h;
   page.drawRectangle({
@@ -213,30 +228,21 @@ function drawSectionHeading(page: PDFPage, fonts: Fonts, title: string, yTop: nu
     y: yBottom,
     width: CONTENT_W,
     height: h,
-    color: HEADING_BG,
-    borderColor: LINE,
-    borderWidth: 0.5,
-  });
-  page.drawRectangle({
-    x: MARGIN,
-    y: yBottom,
-    width: 4,
-    height: h,
-    color: BRAND,
+    color: theme.palette.sectionBg,
   });
   page.drawText(title, {
     x: MARGIN + 12,
     y: yBottom + 7,
     size: 10,
-    font: fonts.bold,
-    color: BRAND,
+    font: theme.fonts.bold,
+    color: WHITE,
   });
   return yBottom - 10;
 }
 
 function drawLabeledValue(
   page: PDFPage,
-  fonts: Fonts,
+  theme: Theme,
   label: string,
   value: string,
   x: number,
@@ -250,16 +256,16 @@ function drawLabeledValue(
       x: x + 4,
       y: y + 3,
       size: 5.5,
-      color: BRAND_LIGHT,
-      borderColor: BRAND,
+      color: theme.palette.primaryLight,
+      borderColor: theme.palette.primary,
       borderWidth: 0.7,
     });
     page.drawText(options.icon, {
       x: x + 1.8,
       y: y + 0.8,
       size: 6,
-      font: fonts.bold,
-      color: BRAND,
+      font: theme.fonts.bold,
+      color: theme.palette.primary,
     });
   }
   const labelX = options?.icon ? x + 14 : x;
@@ -267,17 +273,17 @@ function drawLabeledValue(
     x: labelX,
     y,
     size: 8,
-    font: fonts.regular,
+    font: theme.fonts.regular,
     color: MUTED,
   });
-  const lines = wrapText(value || "—", fonts.bold, 9, valueMaxWidth);
+  const lines = wrapText(value || "—", theme.fonts.bold, 9, valueMaxWidth);
   let cursor = y;
   for (const line of lines) {
     page.drawText(line, {
       x: labelX + labelWidth,
       y: cursor,
       size: 9,
-      font: options?.boldValue === false ? fonts.regular : fonts.bold,
+      font: options?.boldValue === false ? theme.fonts.regular : theme.fonts.bold,
       color: INK,
     });
     cursor -= 11;
@@ -304,8 +310,10 @@ function drawWatermark(page: PDFPage, watermark: PDFImage | null) {
 function drawCompanyStamp(
   page: PDFPage,
   fonts: Fonts,
+  palette: PdfPalette,
   x: number,
   y: number,
+  companyName: string,
   abn?: string
 ) {
   const w = 118;
@@ -315,7 +323,7 @@ function drawCompanyStamp(
     y: y - h,
     width: w,
     height: h,
-    borderColor: STAMP_BLUE,
+    borderColor: palette.accent,
     borderWidth: 2,
     color: WHITE,
     opacity: 0.92,
@@ -325,22 +333,23 @@ function drawCompanyStamp(
     y: y - h + 3,
     width: w - 6,
     height: h - 6,
-    borderColor: STAMP_BLUE,
+    borderColor: palette.accent,
     borderWidth: 0.8,
   });
-  page.drawText("EVEREST CAR RENTAL", {
-    x: x + 10,
+  const stampName = companyName.toUpperCase();
+  page.drawText(stampName, {
+    x: x + Math.max(8, (w - fonts.bold.widthOfTextAtSize(stampName, 7)) / 2),
     y: y - 16,
     size: 7,
     font: fonts.bold,
-    color: STAMP_BLUE,
+    color: palette.accent,
   });
   page.drawText("APPROVED", {
     x: x + 32,
     y: y - 30,
     size: 10,
     font: fonts.bold,
-    color: STAMP_BLUE,
+    color: palette.primary,
   });
   if (abn?.trim()) {
     page.drawText(`ABN ${abn.trim()}`, {
@@ -348,7 +357,7 @@ function drawCompanyStamp(
       y: y - 43,
       size: 6.5,
       font: fonts.regular,
-      color: STAMP_BLUE,
+      color: palette.accent,
     });
   } else {
     page.drawText("OFFICIAL STAMP", {
@@ -356,7 +365,7 @@ function drawCompanyStamp(
       y: y - 43,
       size: 6.5,
       font: fonts.regular,
-      color: STAMP_BLUE,
+      color: palette.accent,
     });
   }
 }
@@ -384,14 +393,17 @@ function drawFooter(
   }
 
   const footerLeft = theme.qr ? MARGIN + 42 : MARGIN;
-  const website = siteConfig.website || "www.everestcarrental.com";
-  page.drawText(`Everest Car Rental | ${website} | Page ${pageNumber} of ${theme.pageCount}`, {
-    x: footerLeft,
-    y,
-    size: 7.5,
-    font: theme.fonts.regular,
-    color: MUTED,
-  });
+  const website = theme.brand.website.replace(/^https?:\/\//, "");
+  page.drawText(
+    `${theme.brand.name} | ${website} | Page ${pageNumber} of ${theme.pageCount}`,
+    {
+      x: footerLeft,
+      y,
+      size: 7.5,
+      font: theme.fonts.regular,
+      color: MUTED,
+    }
+  );
   page.drawText(
     `${theme.agreementNumber} · v${AGREEMENT_PDF_VERSION} · ${format(theme.generatedAt, "dd MMM yyyy HH:mm")}`,
     {
@@ -406,52 +418,77 @@ function drawFooter(
 
 function drawHeader(page: PDFPage, theme: Theme, input: AgreementPdfInput): number {
   drawWatermark(page, theme.watermark);
+  const { palette } = theme;
 
-  const badgeW = 148;
-  const badgeH = 34;
-  const badgeX = PAGE_W - MARGIN - badgeW;
-  const badgeY = PAGE_H - MARGIN - badgeH;
-  const logoMaxW = badgeX - MARGIN - 16;
+  const emblemSize = 58;
+  const emblemTop = PAGE_H - MARGIN;
+  const emblemY = emblemTop - emblemSize;
+  const textX = MARGIN + emblemSize + 14;
+  const companyName = input.companyName || theme.brand.name;
 
-  if (theme.logo) {
-    const dims = theme.logo.scale(1);
-    const targetH = 30;
-    const scale = Math.min(targetH / dims.height, logoMaxW / dims.width);
-    const w = dims.width * scale;
-    const h = dims.height * scale;
-    page.drawImage(theme.logo, {
+  if (theme.emblem) {
+    page.drawImage(theme.emblem, {
       x: MARGIN,
-      y: PAGE_H - MARGIN - h,
-      width: w,
-      height: h,
+      y: emblemY,
+      width: emblemSize,
+      height: emblemSize,
     });
   } else {
-    page.drawText("EVEREST CAR RENTAL", {
+    page.drawRectangle({
       x: MARGIN,
-      y: PAGE_H - MARGIN - 12,
-      size: 14,
-      font: theme.fonts.bold,
-      color: BRAND,
+      y: emblemY,
+      width: emblemSize,
+      height: emblemSize,
+      color: palette.primaryLight,
+      borderColor: palette.primary,
+      borderWidth: 1.5,
     });
-    page.drawText("Rental Agreement", {
-      x: MARGIN,
-      y: PAGE_H - MARGIN - 28,
-      size: 11,
-      font: theme.fonts.regular,
-      color: INK,
+    page.drawText("NB", {
+      x: MARGIN + 16,
+      y: emblemY + emblemSize / 2 - 8,
+      size: 24,
+      font: theme.fonts.bold,
+      color: palette.primary,
     });
   }
+
+  page.drawText(companyName, {
+    x: textX,
+    y: emblemTop - 20,
+    size: 22,
+    font: theme.fonts.bold,
+    color: palette.accent,
+  });
+  page.drawText("Rental Agreement", {
+    x: textX,
+    y: emblemTop - 36,
+    size: 11,
+    font: theme.fonts.regular,
+    color: INK,
+  });
+  page.drawText(theme.brand.tagline, {
+    x: textX,
+    y: emblemTop - 50,
+    size: 8,
+    font: theme.fonts.regular,
+    color: MUTED,
+  });
+
+  const badgeW = 148;
+  const badgeH = 38;
+  const badgeX = PAGE_W - MARGIN - badgeW;
+  const badgeY = emblemTop - badgeH;
 
   page.drawRectangle({
     x: badgeX,
     y: badgeY,
     width: badgeW,
     height: badgeH,
-    color: BRAND,
+    color: palette.primary,
   });
   page.drawText("BOOKING REFERENCE", {
     x: badgeX + 10,
-    y: badgeY + 20,
+    y: badgeY + 22,
     size: 7,
     font: theme.fonts.bold,
     color: WHITE,
@@ -459,17 +496,17 @@ function drawHeader(page: PDFPage, theme: Theme, input: AgreementPdfInput): numb
   const ref = input.bookingId.slice(0, 14);
   page.drawText(ref, {
     x: badgeX + 10,
-    y: badgeY + 8,
+    y: badgeY + 9,
     size: 8,
     font: theme.fonts.regular,
     color: WHITE,
   });
 
-  let y = PAGE_H - MARGIN - 48;
+  let y = emblemY - 12;
   const contact = [
-    input.companyAddress || siteConfig.address,
+    input.companyAddress || theme.brand.address,
     `${input.companyPhone}  ·  ${input.companyEmail}`,
-    input.companyWebsite || siteConfig.website,
+    input.companyWebsite || theme.brand.website,
   ]
     .filter(Boolean)
     .join("  |  ");
@@ -486,8 +523,8 @@ function drawHeader(page: PDFPage, theme: Theme, input: AgreementPdfInput): numb
   page.drawLine({
     start: { x: MARGIN, y },
     end: { x: PAGE_W - MARGIN, y },
-    thickness: 1.2,
-    color: BRAND,
+    thickness: 2,
+    color: palette.primary,
   });
 
   y -= 14;
@@ -496,7 +533,7 @@ function drawHeader(page: PDFPage, theme: Theme, input: AgreementPdfInput): numb
     y,
     size: 8,
     font: theme.fonts.bold,
-    color: INK,
+    color: palette.accent,
   });
   page.drawText(
     `Generated ${format(theme.generatedAt, "dd MMM yyyy, h:mm a")}  ·  Version ${AGREEMENT_PDF_VERSION}`,
@@ -513,31 +550,31 @@ function drawHeader(page: PDFPage, theme: Theme, input: AgreementPdfInput): numb
 }
 
 function drawCustomerCard(page: PDFPage, theme: Theme, input: AgreementPdfInput, yTop: number): number {
-  let y = drawSectionHeading(page, theme.fonts, "CUSTOMER DETAILS", yTop);
+  let y = drawSectionHeading(page, theme, "CUSTOMER DETAILS", yTop);
   const cardH = 78;
   const bottom = y - cardH;
   drawCard(page, MARGIN, bottom, CONTENT_W, cardH);
   y -= 14;
-  y = drawLabeledValue(page, theme.fonts, "Name", input.customerName, MARGIN + 12, y, 48, 420, {
+  y = drawLabeledValue(page, theme, "Name", input.customerName, MARGIN + 12, y, 48, 420, {
     icon: "N",
   });
   y -= 2;
-  y = drawLabeledValue(page, theme.fonts, "Email", input.customerEmail, MARGIN + 12, y, 48, 420, {
+  y = drawLabeledValue(page, theme, "Email", input.customerEmail, MARGIN + 12, y, 48, 420, {
     icon: "E",
   });
   y -= 2;
-  y = drawLabeledValue(page, theme.fonts, "Phone", input.customerPhone, MARGIN + 12, y, 48, 420, {
+  y = drawLabeledValue(page, theme, "Phone", input.customerPhone, MARGIN + 12, y, 48, 420, {
     icon: "P",
   });
   y -= 2;
-  y = drawLabeledValue(page, theme.fonts, "Address", input.customerAddress || "—", MARGIN + 12, y, 48, 420, {
+  y = drawLabeledValue(page, theme, "Address", input.customerAddress || "—", MARGIN + 12, y, 48, 420, {
     icon: "A",
   });
   return bottom - 12;
 }
 
 function drawDriverTable(page: PDFPage, theme: Theme, input: AgreementPdfInput, yTop: number): number {
-  let y = drawSectionHeading(page, theme.fonts, "DRIVER DETAILS", yTop);
+  let y = drawSectionHeading(page, theme, "DRIVER DETAILS", yTop);
   const rows = input.drivers.length ? input.drivers : [
     {
       isPrimary: true,
@@ -555,9 +592,7 @@ function drawDriverTable(page: PDFPage, theme: Theme, input: AgreementPdfInput, 
     y: y - 18,
     width: CONTENT_W,
     height: 18,
-    color: HEADING_BG,
-    borderColor: LINE,
-    borderWidth: 0.5,
+    color: theme.palette.sectionBg,
   });
   headers.forEach((header, i) => {
     page.drawText(header, {
@@ -565,7 +600,7 @@ function drawDriverTable(page: PDFPage, theme: Theme, input: AgreementPdfInput, 
       y: y - 12,
       size: 8,
       font: theme.fonts.bold,
-      color: MUTED,
+      color: WHITE,
     });
   });
   y -= 18;
@@ -595,21 +630,21 @@ function drawDriverTable(page: PDFPage, theme: Theme, input: AgreementPdfInput, 
 }
 
 function drawVehicleCard(page: PDFPage, theme: Theme, input: AgreementPdfInput, yTop: number): number {
-  let y = drawSectionHeading(page, theme.fonts, "VEHICLE DETAILS", yTop);
+  let y = drawSectionHeading(page, theme, "VEHICLE DETAILS", yTop);
   const cardH = 86;
   const bottom = y - cardH;
-  drawCard(page, MARGIN, bottom, CONTENT_W, cardH, TOTAL_BG);
+  drawCard(page, MARGIN, bottom, CONTENT_W, cardH, theme.palette.totalBg);
   y -= 14;
 
   const left = MARGIN + 12;
   const mid = MARGIN + 280;
-  y = drawLabeledValue(page, theme.fonts, "Vehicle", vehicleDisplayName(input.vehicle), left, y, 55, 180, {
+  y = drawLabeledValue(page, theme, "Vehicle", vehicleDisplayName(input.vehicle), left, y, 55, 180, {
     icon: "V",
   });
   const yRightStart = y + 11;
   drawLabeledValue(
     page,
-    theme.fonts,
+    theme,
     "Rego",
     input.vehicle.registration || "—",
     mid,
@@ -620,12 +655,12 @@ function drawVehicleCard(page: PDFPage, theme: Theme, input: AgreementPdfInput, 
   );
 
   y -= 2;
-  y = drawLabeledValue(page, theme.fonts, "VIN", input.vehicle.vin || "—", left, y, 55, 180, {
+  y = drawLabeledValue(page, theme, "VIN", input.vehicle.vin || "—", left, y, 55, 180, {
     icon: "I",
   });
   drawLabeledValue(
     page,
-    theme.fonts,
+    theme,
     "Fuel",
     input.vehicle.fuelType || "—",
     mid,
@@ -638,7 +673,7 @@ function drawVehicleCard(page: PDFPage, theme: Theme, input: AgreementPdfInput, 
   y -= 2;
   y = drawLabeledValue(
     page,
-    theme.fonts,
+    theme,
     "Trans.",
     input.vehicle.transmission || "—",
     left,
@@ -649,7 +684,7 @@ function drawVehicleCard(page: PDFPage, theme: Theme, input: AgreementPdfInput, 
   );
   drawLabeledValue(
     page,
-    theme.fonts,
+    theme,
     "Colour",
     input.vehicle.colour || "—",
     mid,
@@ -663,12 +698,13 @@ function drawVehicleCard(page: PDFPage, theme: Theme, input: AgreementPdfInput, 
 }
 
 function drawRentalDetails(page: PDFPage, theme: Theme, input: AgreementPdfInput, yTop: number): number {
-  let y = drawSectionHeading(page, theme.fonts, "RENTAL DETAILS", yTop);
+  let y = drawSectionHeading(page, theme, "RENTAL DETAILS", yTop);
   const cardH = 92;
   const bottom = y - cardH;
   drawCard(page, MARGIN, bottom, CONTENT_W, cardH);
   const left = MARGIN + 12;
   const mid = MARGIN + 280;
+  const { palette } = theme;
   y -= 14;
 
   page.drawText("Pickup date", { x: left, y, size: 8, font: theme.fonts.regular, color: MUTED });
@@ -713,7 +749,7 @@ function drawRentalDetails(page: PDFPage, theme: Theme, input: AgreementPdfInput
     y,
     size: 10,
     font: theme.fonts.bold,
-    color: BRAND,
+    color: palette.primary,
   });
   page.drawText("Bond", { x: mid, y, size: 8, font: theme.fonts.regular, color: MUTED });
   page.drawText(money(input.bondCents), {
@@ -721,7 +757,7 @@ function drawRentalDetails(page: PDFPage, theme: Theme, input: AgreementPdfInput
     y,
     size: 10,
     font: theme.fonts.bold,
-    color: BRAND,
+    color: palette.primary,
   });
   y -= 14;
 
@@ -764,7 +800,8 @@ function drawRentalDetails(page: PDFPage, theme: Theme, input: AgreementPdfInput
 }
 
 function drawPaymentSummary(page: PDFPage, theme: Theme, input: AgreementPdfInput, yTop: number): number {
-  let y = drawSectionHeading(page, theme.fonts, "PAYMENT SUMMARY", yTop);
+  let y = drawSectionHeading(page, theme, "PAYMENT SUMMARY", yTop);
+  const { palette } = theme;
   const days = Math.max(1, input.rentalDays ?? 1);
   const daily = input.dailyRateCents ?? 0;
   const insurance = input.insuranceCostCents ?? 0;
@@ -808,8 +845,8 @@ function drawPaymentSummary(page: PDFPage, theme: Theme, input: AgreementPdfInpu
     y: bottom + 8,
     width: CONTENT_W - 16,
     height: 26,
-    color: TOTAL_BG,
-    borderColor: BRAND,
+    color: palette.totalBg,
+    borderColor: palette.primary,
     borderWidth: 1,
   });
   page.drawText("GRAND TOTAL", {
@@ -817,21 +854,22 @@ function drawPaymentSummary(page: PDFPage, theme: Theme, input: AgreementPdfInpu
     y: bottom + 16,
     size: 10,
     font: theme.fonts.bold,
-    color: BRAND,
+    color: palette.accent,
   });
   page.drawText(money(grand), {
     x: PAGE_W - MARGIN - 100,
     y: bottom + 15,
     size: 13,
     font: theme.fonts.bold,
-    color: BRAND,
+    color: palette.primary,
   });
 
   return bottom - 12;
 }
 
 function drawTermsSummary(page: PDFPage, theme: Theme, yTop: number): number {
-  let y = drawSectionHeading(page, theme.fonts, "TERMS SUMMARY", yTop);
+  let y = drawSectionHeading(page, theme, "TERMS SUMMARY", yTop);
+  const { palette } = theme;
   const items = [
     "Fuel Policy",
     "Damage Policy",
@@ -851,13 +889,13 @@ function drawTermsSummary(page: PDFPage, theme: Theme, yTop: number): number {
       start: { x: x + 1, y: yy + 3 },
       end: { x: x + 4, y: yy },
       thickness: 1.4,
-      color: BRAND,
+      color: palette.primary,
     });
     page.drawLine({
       start: { x: x + 4, y: yy },
       end: { x: x + 10, y: yy + 7 },
       thickness: 1.4,
-      color: BRAND,
+      color: palette.primary,
     });
     page.drawText(item, {
       x: x + 14,
@@ -873,31 +911,31 @@ function drawTermsSummary(page: PDFPage, theme: Theme, yTop: number): number {
 async function drawSignatureBlock(
   page: PDFPage,
   pdf: PDFDocument,
-  fonts: Fonts,
+  theme: Theme,
   input: AgreementPdfInput,
   yTop: number,
   generatedAt: Date
 ): Promise<number> {
-  let y = drawSectionHeading(page, fonts, "SIGNATURES", yTop);
+  let y = drawSectionHeading(page, theme, "SIGNATURES", yTop);
   page.drawText("Customer signature", {
     x: MARGIN,
     y,
     size: 8,
-    font: fonts.bold,
+    font: theme.fonts.bold,
     color: MUTED,
   });
   page.drawText("Admin signature", {
     x: MARGIN + 190,
     y,
     size: 8,
-    font: fonts.bold,
+    font: theme.fonts.bold,
     color: MUTED,
   });
   page.drawText("Company stamp", {
     x: MARGIN + 380,
     y,
     size: 8,
-    font: fonts.bold,
+    font: theme.fonts.bold,
     color: MUTED,
   });
   y -= 6;
@@ -933,7 +971,7 @@ async function drawSignatureBlock(
       x: MARGIN + 18,
       y: sigBottom + 20,
       size: 8,
-      font: fonts.regular,
+      font: theme.fonts.regular,
       color: MUTED,
     });
   }
@@ -945,24 +983,26 @@ async function drawSignatureBlock(
       x: MARGIN + 214,
       y: sigBottom + 20,
       size: 8,
-      font: fonts.regular,
+      font: theme.fonts.regular,
       color: MUTED,
     });
   }
 
   drawCompanyStamp(
     page,
-    fonts,
+    theme.fonts,
+    theme.palette,
     MARGIN + 380,
     y,
-    input.companyAbn || siteConfig.abn
+    input.companyName || theme.brand.name,
+    input.companyAbn || theme.brand.abn
   );
 
   page.drawText(`Date: ${format(generatedAt, "dd MMM yyyy")}`, {
     x: MARGIN,
     y: sigBottom - 14,
     size: 8,
-    font: fonts.bold,
+    font: theme.fonts.bold,
     color: INK,
   });
 
@@ -977,24 +1017,30 @@ export async function generateRentalAgreementPdf(input: AgreementPdfInput): Prom
     bold: await pdf.embedFont(StandardFonts.HelveticaBold),
   };
 
-  const logo =
-    (await tryEmbedImage(pdf, siteConfig.logo.horizontal)) ||
-    (await tryEmbedImage(pdf, siteConfig.logo.stacked));
+  const brand = getRentalBrand(resolveBookingRentalChannel({ rentalChannel: input.rentalChannel }));
+
+  const emblem =
+    (await tryEmbedImage(pdf, brand.logo.emblem)) ||
+    (await tryEmbedImage(pdf, brand.logo.stacked)) ||
+    (await tryEmbedImage(pdf, brand.logo.horizontal));
   const watermark =
-    (await tryEmbedImage(pdf, siteConfig.logo.stacked)) ||
-    (await tryEmbedImage(pdf, siteConfig.logo.horizontal));
+    (await tryEmbedImage(pdf, brand.logo.stacked)) ||
+    (await tryEmbedImage(pdf, brand.logo.emblem)) ||
+    (await tryEmbedImage(pdf, brand.logo.horizontal));
 
-  const baseUrl = resolveAppBaseUrl();
+  const baseUrl = getAppBaseUrl();
   const bookingUrl = `${baseUrl}/car-rental/booking/success?booking_id=${input.bookingId}`;
-  const qr = await embedQrCode(pdf, bookingUrl);
+  const qr = await embedQrCode(pdf, bookingUrl, brand.qrColor);
 
-  const agreementNumber = buildAgreementNumber(input.bookingId);
+  const agreementNumber = buildAgreementNumber(input.bookingId, brand.agreementPrefix);
   const generatedAt = new Date();
   const pageCount = 2;
 
   const theme: Theme = {
     fonts,
-    logo,
+    brand,
+    palette: buildPdfPalette(brand),
+    emblem,
     watermark,
     qr,
     agreementNumber,
@@ -1019,7 +1065,7 @@ export async function generateRentalAgreementPdf(input: AgreementPdfInput): Prom
   // ——— PAGE 2 (T&Cs, then signatures last) ———
   const page2 = pdf.addPage([PAGE_W, PAGE_H]);
   y = drawHeader(page2, theme, input);
-  y = drawSectionHeading(page2, fonts, "TERMS & CONDITIONS", y);
+  y = drawSectionHeading(page2, theme, "TERMS & CONDITIONS", y);
 
   const terms: Array<{ title: string; body: string }> = [
     {
@@ -1044,7 +1090,7 @@ export async function generateRentalAgreementPdf(input: AgreementPdfInput): Prom
     },
     {
       title: "6. Accident Procedure",
-      body: "Stop safely, prioritise safety, contact emergency services if needed, exchange details, photograph the scene, and notify Everest Car Rental immediately. Do not admit liability.",
+      body: `Stop safely, prioritise safety, contact emergency services if needed, exchange details, photograph the scene, and notify ${input.companyName} immediately. Do not admit liability.`,
     },
     {
       title: "7. Vehicle Return",
@@ -1052,11 +1098,11 @@ export async function generateRentalAgreementPdf(input: AgreementPdfInput): Prom
     },
     {
       title: "8. Cancellation Policy",
-      body: "Cancellations are subject to Everest Car Rental policy for prepaid and walk-in bookings. No-shows and late cancellations may forfeit deposits or attract administration fees.",
+      body: `Cancellations are subject to ${input.companyName} policy for prepaid and walk-in bookings. No-shows and late cancellations may forfeit deposits or attract administration fees.`,
     },
     {
       title: "9. Privacy Policy",
-      body: "Personal information is collected to fulfil the rental and is handled under Australian Privacy Principles and the Everest Car Rental Privacy Policy available at www.everestcarrental.com.",
+      body: `Personal information is collected to fulfil the rental and is handled under Australian Privacy Principles and the ${input.companyName} Privacy Policy available at ${theme.brand.website}.`,
     },
     {
       title: "10. Declaration",
@@ -1073,7 +1119,7 @@ export async function generateRentalAgreementPdf(input: AgreementPdfInput): Prom
       y,
       size: 10,
       font: fonts.bold,
-      color: BRAND,
+      color: theme.palette.accent,
     });
     y -= 12;
     const lines = wrapText(section.body, fonts.regular, 8.5, CONTENT_W);
@@ -1093,7 +1139,7 @@ export async function generateRentalAgreementPdf(input: AgreementPdfInput): Prom
 
   // Place signatures above the footer on the last page
   const signatureTop = Math.min(y - 6, FOOTER_SAFE_Y + signatureReserve);
-  y = await drawSignatureBlock(page2, pdf, fonts, input, signatureTop, generatedAt);
+  y = await drawSignatureBlock(page2, pdf, theme, input, signatureTop, generatedAt);
 
   if (y > FOOTER_SAFE_Y + 8) {
     page2.drawText(

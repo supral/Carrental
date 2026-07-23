@@ -31,6 +31,7 @@ export function shouldBypassStripePayment(): boolean {
 
 /** Public site base URL for redirects, emails, and Stripe return URLs. */
 export function getAppBaseUrl(): string {
+  const onVercel = Boolean(process.env.VERCEL);
   const candidates = [
     process.env.NEXT_PUBLIC_APP_URL,
     process.env.AUTH_URL,
@@ -41,11 +42,12 @@ export function getAppBaseUrl(): string {
   for (const value of candidates) {
     if (!value?.trim()) continue;
     const normalized = value.trim().replace(/\/$/, "");
+    if (onVercel && /localhost|127\.0\.0\.1/i.test(normalized)) continue;
     if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
       return normalized;
     }
     return `https://${normalized}`;
   }
 
-  return "http://localhost:3001";
+  return onVercel ? "https://www.everestcarrental.com" : "http://localhost:3001";
 }

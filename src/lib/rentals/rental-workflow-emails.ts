@@ -1,18 +1,22 @@
 import { format } from "date-fns";
-import { siteConfig } from "@/data/services";
+import { promises as fs } from "fs";
+import { buildBrandedEmailHtml } from "@/lib/email-branding";
 import { sendEmail } from "@/lib/email";
+import {
+  getRentalBrand,
+  resolveBookingRentalChannel,
+  type RentalChannel,
+} from "@/lib/rentals/rental-brand";
 import { publicUrlToAbsolutePath } from "@/lib/uploads/rental-file-storage";
+import { getAppBaseUrl } from "@/lib/stripe";
 
-function appBaseUrl() {
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    process.env.NEXTAUTH_URL ||
-    "http://localhost:3001"
-  ).replace(/\/$/, "");
-}
-
-export function buildRentalAgreementUrl(bookingId: string, token: string) {
-  return `${appBaseUrl()}/rental-agreement/${bookingId}/${token}`;
+/** Customer-facing agreement link — uses the live host (Vercel/local), not a hardcoded brand domain. */
+export function buildRentalAgreementUrl(
+  bookingId: string,
+  token: string,
+  _rentalChannel?: RentalChannel | string | null
+) {
+  return `${getAppBaseUrl()}/rental-agreement/${bookingId}/${token}`;
 }
 
 type BaseBookingMail = {
@@ -21,13 +25,20 @@ type BaseBookingMail = {
   customerName: string | null;
   pickupAt: Date;
   dropoffAt: Date;
+  rentalChannel?: RentalChannel | string | null;
 };
+
+function resolveBrand(booking: { rentalChannel?: RentalChannel | string | null }) {
+  return getRentalBrand(resolveBookingRentalChannel(booking));
+}
 
 export async function sendRentalAgreementRequestEmail(
   booking: BaseBookingMail & { agreementToken: string }
 ) {
   if (!booking.customerEmail || !booking.agreementToken) return;
-  const url = buildRentalAgreementUrl(booking.id, booking.agreementToken);
+  const brand = resolveBrand(booking);
+  const channel = brand.channel;
+  const url = buildRentalAgreementUrl(booking.id, booking.agreementToken, channel);
   const name = booking.customerName ? `Hi ${booking.customerName},` : "Hi there,";
   const text = [
     name,
@@ -39,44 +50,62 @@ export async function sendRentalAgreementRequestEmail(
     `Pickup: ${format(booking.pickupAt, "dd MMM yyyy, h:mm a")}`,
     `Return: ${format(booking.dropoffAt, "dd MMM yyyy, h:mm a")}`,
     "",
-    siteConfig.name,
+    brand.name,
   ].join("\n");
 
   await sendEmail({
     to: booking.customerEmail,
-    subject: `Complete your rental agreement — ${siteConfig.name}`,
+    subject: `Complete your rental agreement — ${brand.name}`,
     text,
-    html: `
-      <div style="font-family:Arial,sans-serif;line-height:1.6;max-width:640px;color:#111">
-        <h2>Complete your rental agreement</h2>
-        <p>${name.replace(",", "")} please submit your driver details and digital signature before pickup.</p>
+    html: buildBrandedEmailHtml({
+      title: "Complete your rental agreement",
+      brand,
+      bodyHtml: `
+        <p style="margin:0 0 16px">${name.replace(",", "")} please submit your driver details and digital signature before pickup.</p>
         <p style="margin:24px 0">
-          <a href="${url}" style="background:#0f172a;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600">
+          <a href="${url}" style="background:${brand.colors.primary};color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;display:inline-block;font-weight:600">
             Complete Rental Agreement
           </a>
         </p>
-        <p>Pickup: ${format(booking.pickupAt, "dd MMM yyyy, h:mm a")}<br/>
+        <p style="margin:0">Pickup: ${format(booking.pickupAt, "dd MMM yyyy, h:mm a")}<br/>
         Return: ${format(booking.dropoffAt, "dd MMM yyyy, h:mm a")}</p>
-      </div>
-    `,
+      `,
+    }),
+    rentalChannel: channel,
   });
 }
 
 export async function sendRentalAgreementCompletedEmail(booking: BaseBookingMail) {
   if (!booking.customerEmail) return;
+  const brand = resolveBrand(booking);
+  const greeting = booking.customerName ?? "there";
   await sendEmail({
     to: booking.customerEmail,
-    subject: `Rental agreement received — ${siteConfig.name}`,
-    text: `Hi ${booking.customerName ?? "there"},\n\nWe have received your completed rental agreement. Our team will assign a vehicle and prepare your rental agreement PDF.\n\n${siteConfig.name}`,
+    subject: `Rental agreement received — ${brand.name}`,
+    text: `Hi ${greeting},\n\nWe have received your completed rental agreement. Our team will assign a vehicle and prepare your rental agreement PDF.\n\n${brand.name}`,
+    html: buildBrandedEmailHtml({
+      title: "Rental agreement received",
+      brand,
+      bodyHtml: `<p style="margin:0">Hi ${greeting}, we have received your completed rental agreement. Our team will assign a vehicle and prepare your rental agreement PDF.</p>`,
+    }),
+    rentalChannel: brand.channel,
   });
 }
 
 export async function sendVehicleReadyEmail(booking: BaseBookingMail & { vehicleLabel: string }) {
   if (!booking.customerEmail) return;
+  const brand = resolveBrand(booking);
+  const greeting = booking.customerName ?? "there";
   await sendEmail({
     to: booking.customerEmail,
-    subject: `Vehicle ready for pickup — ${siteConfig.name}`,
-    text: `Hi ${booking.customerName ?? "there"},\n\nYour vehicle (${booking.vehicleLabel}) is ready for pickup on ${format(booking.pickupAt, "dd MMM yyyy, h:mm a")}.\n\n${siteConfig.name}`,
+    subject: `Vehicle ready for pickup — ${brand.name}`,
+    text: `Hi ${greeting},\n\nYour vehicle (${booking.vehicleLabel}) is ready for pickup on ${format(booking.pickupAt, "dd MMM yyyy, h:mm a")}.\n\n${brand.name}`,
+    html: buildBrandedEmailHtml({
+      title: "Vehicle ready for pickup",
+      brand,
+      bodyHtml: `<p style="margin:0">Hi ${greeting}, your vehicle (<strong>${booking.vehicleLabel}</strong>) is ready for pickup on ${format(booking.pickupAt, "dd MMM yyyy, h:mm a")}.</p>`,
+    }),
+    rentalChannel: brand.channel,
   });
 }
 
@@ -84,34 +113,98 @@ export async function sendRentalAgreementPdfEmail(
   booking: BaseBookingMail & { agreementPdfUrl: string }
 ) {
   if (!booking.customerEmail || !booking.agreementPdfUrl) return;
+  const brand = resolveBrand(booking);
   const abs = publicUrlToAbsolutePath(booking.agreementPdfUrl);
+  const content = await fs.readFile(abs);
+  const greeting = booking.customerName ?? "there";
   await sendEmail({
     to: booking.customerEmail,
-    subject: `Your rental agreement PDF — ${siteConfig.name}`,
-    text: `Hi ${booking.customerName ?? "there"},\n\nPlease find your signed rental agreement attached.\n\n${siteConfig.name}`,
+    subject: `Your rental agreement PDF — ${brand.name}`,
+    text: `Hi ${greeting},\n\nPlease find your signed rental agreement attached.\n\n${brand.name}`,
+    html: buildBrandedEmailHtml({
+      title: "Your rental agreement",
+      brand,
+      bodyHtml: `<p style="margin:0">Hi ${greeting}, please find your signed rental agreement attached to this email.</p>`,
+    }),
     attachments: [
       {
         filename: `rental-agreement-${booking.id}.pdf`,
-        path: abs,
+        content,
         contentType: "application/pdf",
       },
     ],
+    rentalChannel: brand.channel,
   });
+}
+
+type PostBookingMail = BaseBookingMail & {
+  agreementToken?: string | null;
+  pickupAddress: string;
+  dropoffAddress: string;
+  rentalDays: number;
+  baseAmountCents: number;
+  extrasAmountCents: number;
+  taxAmountCents: number;
+  totalAmountCents: number;
+  currency: string;
+  selectedOptions: unknown;
+  vehicle: {
+    title: string | null;
+    make: string;
+    model: string;
+    year: number;
+    vehicleNumber: string | null;
+  };
+};
+
+/** Booking confirmation plus agreement form link when a token is on file. */
+export async function sendPostRentalBookingEmails(booking: PostBookingMail) {
+  const { sendRentalBookingConfirmationEmail } = await import(
+    "@/lib/rentals/rental-booking-email"
+  );
+
+  await sendRentalBookingConfirmationEmail(booking).catch((error) => {
+    console.error("[rental-booking-email]", error);
+  });
+
+  if (booking.agreementToken && booking.customerEmail) {
+    await sendRentalAgreementRequestEmail({
+      id: booking.id,
+      customerEmail: booking.customerEmail,
+      customerName: booking.customerName,
+      pickupAt: booking.pickupAt,
+      dropoffAt: booking.dropoffAt,
+      agreementToken: booking.agreementToken,
+      rentalChannel: booking.rentalChannel,
+    }).catch((error) => {
+      console.error("[rental-agreement-request-email]", error);
+    });
+  }
 }
 
 export async function sendRentalClosedEmail(
   booking: BaseBookingMail & { totalChargesLabel: string }
 ) {
   if (!booking.customerEmail) return;
+  const brand = resolveBrand(booking);
+  const greeting = booking.customerName ?? "there";
   await sendEmail({
     to: booking.customerEmail,
-    subject: `Rental closed — ${siteConfig.name}`,
-    text: `Hi ${booking.customerName ?? "there"},\n\nYour rental has been closed. Additional charges: ${booking.totalChargesLabel}.\n\nThank you for choosing ${siteConfig.name}.`,
+    subject: `Rental closed — ${brand.name}`,
+    text: `Hi ${greeting},\n\nYour rental has been closed. Additional charges: ${booking.totalChargesLabel}.\n\nThank you for choosing ${brand.name}.`,
+    html: buildBrandedEmailHtml({
+      title: "Rental closed",
+      brand,
+      bodyHtml: `<p style="margin:0">Hi ${greeting}, your rental has been closed. Additional charges: <strong>${booking.totalChargesLabel}</strong>.</p><p style="margin:16px 0 0">Thank you for choosing ${brand.name}.</p>`,
+    }),
+    rentalChannel: brand.channel,
   });
 }
 
 export async function sendRentalInvoiceEmail(
-  invoice: import("@/lib/rentals/rental-invoice").RentalInvoiceInput
+  invoice: import("@/lib/rentals/rental-invoice").RentalInvoiceInput & {
+    rentalChannel?: RentalChannel | string | null;
+  }
 ) {
   if (!invoice.customerEmail) return;
 
@@ -122,7 +215,8 @@ export async function sendRentalInvoiceEmail(
 
   const { pdfUrl, invoiceNumber } = await generateRentalInvoicePdf(invoice);
   const content = buildRentalInvoiceEmailContent(invoice, invoiceNumber);
-  const abs = publicUrlToAbsolutePath(pdfUrl);
+  const pdfContent = await fs.readFile(publicUrlToAbsolutePath(pdfUrl));
+  const channel = resolveBookingRentalChannel({ rentalChannel: invoice.rentalChannel });
 
   await sendEmail({
     to: invoice.customerEmail,
@@ -132,10 +226,11 @@ export async function sendRentalInvoiceEmail(
     attachments: [
       {
         filename: `rental-invoice-${invoiceNumber}.pdf`,
-        path: abs,
+        content: pdfContent,
         contentType: "application/pdf",
       },
     ],
+    rentalChannel: channel,
   });
 
   return { pdfUrl, invoiceNumber };
