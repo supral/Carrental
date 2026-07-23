@@ -401,15 +401,22 @@ export default function AdminBookingWorkflow({
                         const file = event.target.files?.[0];
                         if (!file) return;
                         setOfficeUploading(true);
+                        setOfficeLicencePhotoUrl("");
                         try {
                           const body = new FormData();
                           body.append("file", file);
                           const res = await fetch("/api/uploads/licence", { method: "POST", body });
-                          const json = await res.json();
-                          if (!res.ok) throw new Error(json.error || "Upload failed");
+                          const json = await res.json().catch(() => ({}));
+                          if (!res.ok) {
+                            throw new Error(
+                              typeof json.error === "string" ? json.error : "Upload failed"
+                            );
+                          }
+                          if (!json.url) throw new Error("Upload failed — no URL returned");
                           setOfficeLicencePhotoUrl(json.url);
                           toast({ type: "success", message: "Licence image uploaded" });
                         } catch (err) {
+                          setOfficeLicencePhotoUrl("");
                           toast({
                             type: "error",
                             message: err instanceof Error ? err.message : "Upload failed",
@@ -419,8 +426,16 @@ export default function AdminBookingWorkflow({
                         }
                       }}
                     />
-                    {officeLicencePhotoUrl && (
-                      <p className="mt-1 text-xs text-emerald-700">Image uploaded</p>
+                    {officeUploading && (
+                      <p className="mt-1 text-xs text-muted-foreground">Uploading licence…</p>
+                    )}
+                    {!officeUploading && officeLicencePhotoUrl && (
+                      <p className="mt-1 text-xs text-emerald-700">Image uploaded — ready to complete</p>
+                    )}
+                    {!officeUploading && !officeLicencePhotoUrl && (
+                      <p className="mt-1 text-xs text-amber-700">
+                        Select a file and wait until it uploads before completing.
+                      </p>
                     )}
                   </div>
                   <div>

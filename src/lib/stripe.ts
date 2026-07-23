@@ -32,22 +32,48 @@ export function shouldBypassStripePayment(): boolean {
 /** Public site base URL for redirects, emails, and Stripe return URLs. */
 export function getAppBaseUrl(): string {
   const onVercel = Boolean(process.env.VERCEL);
-  const candidates = [
-    process.env.NEXT_PUBLIC_APP_URL,
-    process.env.AUTH_URL,
-    process.env.VERCEL_PROJECT_PRODUCTION_URL,
-    process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : undefined,
-  ];
-
-  for (const value of candidates) {
-    if (!value?.trim()) continue;
+  const normalize = (value: string) => {
     const normalized = value.trim().replace(/\/$/, "");
-    if (onVercel && /localhost|127\.0\.0\.1/i.test(normalized)) continue;
     if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
       return normalized;
     }
     return `https://${normalized}`;
+  };
+  const isPreviewHost = (url: string) => {
+    try {
+      return /\.vercel\.app$/i.test(new URL(url).hostname);
+    } catch {
+      return false;
+    }
+  };
+
+  const deploymentUrl = process.env.VERCEL_URL
+    ? normalize(process.env.VERCEL_URL)
+    : undefined;
+
+  const configured = [process.env.NEXT_PUBLIC_APP_URL, process.env.AUTH_URL]
+    .map((value) => value?.trim())
+    .filter((value): value is string => Boolean(value))
+    .map(normalize)
+    .find((url) => !(onVercel && /localhost|127\.0\.0\.1/i.test(url)));
+
+  if (configured) {
+    if (
+      onVercel &&
+      deploymentUrl &&
+      isPreviewHost(configured) &&
+      configured !== deploymentUrl
+    ) {
+      return deploymentUrl;
+    }
+    return configured;
   }
+
+  if (process.env.VERCEL_ENV === "production" && process.env.VERCEL_PROJECT_PRODUCTION_URL) {
+    return normalize(process.env.VERCEL_PROJECT_PRODUCTION_URL);
+  }
+
+  if (deploymentUrl) return deploymentUrl;
 
   return onVercel ? "https://www.everestcarrental.com" : "http://localhost:3001";
 }

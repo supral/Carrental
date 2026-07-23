@@ -5,6 +5,8 @@ import sharp from "sharp";
 import { put } from "@vercel/blob";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "public", "uploads");
+/** Inline data URLs are a Vercel fallback when Blob is not configured — keep small. */
+const MAX_INLINE_BYTES = 4 * 1024 * 1024;
 
 type UploadFolder = "signatures" | "licences" | "damage" | "agreements";
 
@@ -20,8 +22,13 @@ function extensionFromMime(mime: string): string {
   return "jpg";
 }
 
-function shouldUseBlobStorage(): boolean {
-  return Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL);
+function toDataUrl(buffer: Buffer, mime: string): string {
+  if (buffer.length > MAX_INLINE_BYTES) {
+    throw new Error(
+      "File too large for inline storage. Create a Vercel Blob store and set BLOB_READ_WRITE_TOKEN."
+    );
+  }
+  return `data:${mime};base64,${buffer.toString("base64")}`;
 }
 
 /** pdf-lib only accepts PNG/JPEG — normalize signature uploads to PNG. */
@@ -41,7 +48,7 @@ async function persistUpload(
 ): Promise<string> {
   const filename = `${Date.now()}-${randomBytes(6).toString("hex")}.${ext}`;
 
-  if (shouldUseBlobStorage()) {
+  if (process.env.BLOB_READ_WRITE_TOKEN) {
     try {
       const blob = await put(`uploads/${folder}/${filename}`, buffer, {
         access: "public",
@@ -50,11 +57,12 @@ async function persistUpload(
       });
       return blob.url;
     } catch (error) {
-      const detail = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `Cloud upload failed (${detail}). On Vercel, create a Blob store and set BLOB_READ_WRITE_TOKEN.`
-      );
+      console.error("[rental-file-storage] Blob upload failed, using inline fallback:", error);
     }
+  }
+
+  if (process.env.VERCEL) {
+    return toDataUrl(buffer, mime);
   }
 
   const dir = path.join(UPLOAD_ROOT, folder);
@@ -105,8 +113,14 @@ export function publicUrlToAbsolutePath(publicUrl: string): string {
   return path.join(process.cwd(), "public", cleaned);
 }
 
-/** Read bytes from a local /uploads path or a remote (Vercel Blob) URL. */
+/** Read bytes from a local path, remote Blob URL, or inline data URL. */
 export async function readUploadBytes(url: string): Promise<Buffer> {
+  if (url.startsWith("data:")) {
+    const match = /^data:([^;]+);base64,(.+)$/.exec(url);
+    if (!match) throw new Error("Invalid data URL");
+    return Buffer.from(match[2], "base64");
+  }
+
   if (/^https?:\/\//i.test(url)) {
     const res = await fetch(url);
     if (!res.ok) {
