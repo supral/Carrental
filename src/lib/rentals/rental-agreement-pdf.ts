@@ -1,6 +1,5 @@
 import { PDFDocument, StandardFonts, rgb, type PDFFont, type PDFImage, type PDFPage } from "pdf-lib";
 import { format } from "date-fns";
-import { promises as fs } from "fs";
 import { createHash, randomBytes } from "crypto";
 import QRCode from "qrcode";
 import {
@@ -9,7 +8,7 @@ import {
   type RentalBrandConfig,
   type RentalChannel,
 } from "@/lib/rentals/rental-brand";
-import { publicUrlToAbsolutePath, saveBinaryUpload } from "@/lib/uploads/rental-file-storage";
+import { readUploadBytes, saveBinaryUpload } from "@/lib/uploads/rental-file-storage";
 import { getAppBaseUrl } from "@/lib/stripe";
 
 export const AGREEMENT_PDF_VERSION = "2.3";
@@ -155,8 +154,7 @@ function sniffImageKind(bytes: Buffer): "png" | "jpg" | "other" {
 async function tryEmbedImage(pdf: PDFDocument, url: string | null | undefined) {
   if (!url) return null;
   try {
-    const abs = publicUrlToAbsolutePath(url);
-    let bytes = Buffer.from(await fs.readFile(abs));
+    let bytes = await readUploadBytes(url);
     let kind = sniffImageKind(bytes);
 
     // pdf-lib only embeds PNG/JPEG. Convert SVG/WebP/etc (office typed sigs are SVG).

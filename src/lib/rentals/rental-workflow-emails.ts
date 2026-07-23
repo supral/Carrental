@@ -1,5 +1,4 @@
 import { format } from "date-fns";
-import { promises as fs } from "fs";
 import { buildBrandedEmailHtml } from "@/lib/email-branding";
 import { sendEmail } from "@/lib/email";
 import {
@@ -7,7 +6,7 @@ import {
   resolveBookingRentalChannel,
   type RentalChannel,
 } from "@/lib/rentals/rental-brand";
-import { publicUrlToAbsolutePath } from "@/lib/uploads/rental-file-storage";
+import { readUploadBytes } from "@/lib/uploads/rental-file-storage";
 import { getAppBaseUrl } from "@/lib/stripe";
 
 /** Customer-facing agreement link — uses the live host (Vercel/local), not a hardcoded brand domain. */
@@ -114,8 +113,7 @@ export async function sendRentalAgreementPdfEmail(
 ) {
   if (!booking.customerEmail || !booking.agreementPdfUrl) return;
   const brand = resolveBrand(booking);
-  const abs = publicUrlToAbsolutePath(booking.agreementPdfUrl);
-  const content = await fs.readFile(abs);
+  const content = await readUploadBytes(booking.agreementPdfUrl);
   const greeting = booking.customerName ?? "there";
   await sendEmail({
     to: booking.customerEmail,
@@ -215,7 +213,7 @@ export async function sendRentalInvoiceEmail(
 
   const { pdfUrl, invoiceNumber } = await generateRentalInvoicePdf(invoice);
   const content = buildRentalInvoiceEmailContent(invoice, invoiceNumber);
-  const pdfContent = await fs.readFile(publicUrlToAbsolutePath(pdfUrl));
+  const pdfContent = await readUploadBytes(pdfUrl);
   const channel = resolveBookingRentalChannel({ rentalChannel: invoice.rentalChannel });
 
   await sendEmail({

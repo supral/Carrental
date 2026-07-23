@@ -2,8 +2,11 @@ import { promises as fs } from "fs";
 import path from "path";
 import { randomBytes } from "crypto";
 import sharp from "sharp";
+import { put } from "@vercel/blob";
 
 const UPLOAD_ROOT = path.join(process.cwd(), "public", "uploads");
+
+type UploadFolder = "signatures" | "licences" | "damage" | "agreements";
 
 async function ensureDir(dir: string) {
   await fs.mkdir(dir, { recursive: true });
@@ -17,6 +20,10 @@ function extensionFromMime(mime: string): string {
   return "jpg";
 }
 
+function shouldUseBlobStorage(): boolean {
+  return Boolean(process.env.BLOB_READ_WRITE_TOKEN || process.env.VERCEL);
+}
+
 /** pdf-lib only accepts PNG/JPEG — normalize signature uploads to PNG. */
 async function bufferAsPng(buffer: Buffer): Promise<Buffer> {
   if (buffer.length >= 8 && buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4e && buffer[3] === 0x47) {
@@ -26,53 +33,88 @@ async function bufferAsPng(buffer: Buffer): Promise<Buffer> {
   return Buffer.from(out.buffer, out.byteOffset, out.byteLength);
 }
 
-/** Persist a data URL (e.g. signature canvas) under public/uploads. */
+async function persistUpload(
+  buffer: Buffer,
+  mime: string,
+  folder: UploadFolder,
+  ext: string
+): Promise<string> {
+  const filename = `${Date.now()}-${randomBytes(6).toString("hex")}.${ext}`;
+
+  if (shouldUseBlobStorage()) {
+    try {
+      const blob = await put(`uploads/${folder}/${filename}`, buffer, {
+        access: "public",
+        contentType: mime,
+        addRandomSuffix: false,
+      });
+      return blob.url;
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `Cloud upload failed (${detail}). On Vercel, create a Blob store and set BLOB_READ_WRITE_TOKEN.`
+      );
+    }
+  }
+
+  const dir = path.join(UPLOAD_ROOT, folder);
+  await ensureDir(dir);
+  await fs.writeFile(path.join(dir, filename), buffer);
+  return `/uploads/${folder}/${filename}`;
+}
+
+/** Persist a data URL (e.g. signature canvas) under public/uploads or Vercel Blob. */
 export async function saveDataUrlUpload(
   dataUrl: string,
-  folder: "signatures" | "licences" | "damage" | "agreements"
+  folder: UploadFolder
 ): Promise<string> {
   const match = /^data:([^;]+);base64,(.+)$/.exec(dataUrl);
   if (!match) throw new Error("Invalid data URL");
 
-  const mime = match[1];
+  let mime = match[1];
   let buffer: Buffer = Buffer.from(match[2], "base64");
   if (buffer.length > 8 * 1024 * 1024) {
     throw new Error("File too large (max 8MB)");
   }
 
   let ext = extensionFromMime(mime);
-  // Typed office signatures are SVG; canvas pads may send other formats.
-  // Always store signatures as PNG so agreement PDF embedding never fails.
   if (folder === "signatures") {
     buffer = await bufferAsPng(buffer);
     ext = "png";
+    mime = "image/png";
   }
 
-  const dir = path.join(UPLOAD_ROOT, folder);
-  await ensureDir(dir);
-  const filename = `${Date.now()}-${randomBytes(6).toString("hex")}.${ext}`;
-  await fs.writeFile(path.join(dir, filename), buffer);
-  return `/uploads/${folder}/${filename}`;
+  return persistUpload(buffer, mime, folder, ext);
 }
 
 export async function saveBinaryUpload(
   buffer: Buffer,
   mime: string,
-  folder: "signatures" | "licences" | "damage" | "agreements",
+  folder: UploadFolder,
   preferredExt?: string
 ): Promise<string> {
   if (buffer.length > 12 * 1024 * 1024) {
     throw new Error("File too large (max 12MB)");
   }
-  const dir = path.join(UPLOAD_ROOT, folder);
-  await ensureDir(dir);
   const ext = preferredExt ?? extensionFromMime(mime);
-  const filename = `${Date.now()}-${randomBytes(6).toString("hex")}.${ext}`;
-  await fs.writeFile(path.join(dir, filename), buffer);
-  return `/uploads/${folder}/${filename}`;
+  return persistUpload(buffer, mime, folder, ext);
 }
 
 export function publicUrlToAbsolutePath(publicUrl: string): string {
   const cleaned = publicUrl.startsWith("/") ? publicUrl.slice(1) : publicUrl;
   return path.join(process.cwd(), "public", cleaned);
+}
+
+/** Read bytes from a local /uploads path or a remote (Vercel Blob) URL. */
+export async function readUploadBytes(url: string): Promise<Buffer> {
+  if (/^https?:\/\//i.test(url)) {
+    const res = await fetch(url);
+    if (!res.ok) {
+      throw new Error(`Failed to read upload (${res.status})`);
+    }
+    return Buffer.from(await res.arrayBuffer());
+  }
+
+  const abs = publicUrlToAbsolutePath(url);
+  return Buffer.from(await fs.readFile(abs));
 }
