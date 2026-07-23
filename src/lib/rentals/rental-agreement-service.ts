@@ -6,6 +6,7 @@ import {
 } from "@prisma/client";
 import { addDays } from "date-fns";
 import { siteConfig } from "@/data/services";
+import { getRentalBrand, resolveBookingRentalChannel } from "@/lib/rentals/rental-brand";
 import { prisma } from "@/lib/prisma";
 import {
   calculateReturnCharges,
@@ -78,6 +79,7 @@ export async function sendOrResendAgreementRequestEmail(bookingId: string) {
       agreementToken: true,
       agreementTokenExpiresAt: true,
       customerFormCompletedAt: true,
+      rentalChannel: true,
     },
   });
 
@@ -130,13 +132,14 @@ export async function sendOrResendAgreementRequestEmail(bookingId: string) {
     pickupAt: booking.pickupAt,
     dropoffAt: booking.dropoffAt,
     agreementToken: token,
+    rentalChannel: booking.rentalChannel,
   });
 
   const { buildRentalAgreementUrl } = await import("@/lib/rentals/rental-workflow-emails");
   return {
     ok: true as const,
     status,
-    agreementUrl: buildRentalAgreementUrl(booking.id, token),
+    agreementUrl: buildRentalAgreementUrl(booking.id, token, booking.rentalChannel),
   };
 }
 
@@ -247,7 +250,7 @@ export async function applyAdminAssistedAgreement(
 
   const dates = await prisma.rentalBooking.findUniqueOrThrow({
     where: { id: bookingId },
-    select: { pickupAt: true, dropoffAt: true },
+    select: { pickupAt: true, dropoffAt: true, rentalChannel: true },
   });
 
   await sendRentalAgreementCompletedEmail({
@@ -256,6 +259,7 @@ export async function applyAdminAssistedAgreement(
     customerName: input.customerName,
     pickupAt: dates.pickupAt,
     dropoffAt: dates.dropoffAt,
+    rentalChannel: dates.rentalChannel,
   }).catch(() => undefined);
 }
 
@@ -386,6 +390,7 @@ export async function submitCustomerRentalAgreement(
     customerName: booking.customerName,
     pickupAt: booking.pickupAt,
     dropoffAt: booking.dropoffAt,
+    rentalChannel: booking.rentalChannel,
   });
 }
 
@@ -571,6 +576,7 @@ async function finalizePickupAgreementPdf(
       customerEmail: string | null;
       customerPhone: string | null;
       customerAddress: string | null;
+      rentalChannel?: string | null;
       rentalDays: number;
       extrasAmountCents: number;
       taxAmountCents: number;
@@ -603,14 +609,20 @@ async function finalizePickupAgreementPdf(
     orderBy: { sortOrder: "asc" },
   });
 
+  const rentalChannel = resolveBookingRentalChannel({
+    rentalChannel: booking.rentalChannel ?? null,
+  });
+  const brand = getRentalBrand(rentalChannel);
+
   const pdfUrl = await generateRentalAgreementPdf({
     bookingId,
-    companyName: siteConfig.name,
-    companyEmail: siteConfig.email,
-    companyPhone: siteConfig.phone,
-    companyAddress: siteConfig.address,
-    companyWebsite: siteConfig.website,
-    companyAbn: siteConfig.abn,
+    rentalChannel,
+    companyName: brand.name,
+    companyEmail: brand.email,
+    companyPhone: brand.phone,
+    companyAddress: brand.address,
+    companyWebsite: brand.website,
+    companyAbn: brand.abn,
     customerName:
       booking.customerName ??
       `${drivers[0]?.firstName ?? ""} ${drivers[0]?.lastName ?? ""}`.trim(),
@@ -672,6 +684,7 @@ async function finalizePickupAgreementPdf(
     pickupAt: booking.pickupAt,
     dropoffAt: booking.dropoffAt,
     vehicleLabel,
+    rentalChannel,
   }).catch(() => undefined);
 
   await sendRentalAgreementPdfEmail({
@@ -681,7 +694,10 @@ async function finalizePickupAgreementPdf(
     pickupAt: booking.pickupAt,
     dropoffAt: booking.dropoffAt,
     agreementPdfUrl: result.pdfUrl,
-  }).catch(() => undefined);
+    rentalChannel,
+  }).catch((error) => {
+    console.error("[rental-agreement-pdf-email]", error);
+  });
 
   return result;
 }
@@ -777,6 +793,7 @@ export async function processVehicleReturn(bookingId: string, input: ReturnCheck
 
   await sendRentalInvoiceEmail({
     bookingId: booking.id,
+    rentalChannel: booking.rentalChannel,
     customerName: booking.customerName,
     customerEmail: booking.customerEmail,
     customerPhone: booking.customerPhone,

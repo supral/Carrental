@@ -66,7 +66,7 @@ export function calculateBookingPrice(input: {
       type: selection.type as RentalOptionType,
       category: config.category ?? catalog?.category ?? "extra",
       label: config.label ?? catalog?.label ?? String(selection.type),
-      description: config.description ?? config.defaultDescription ?? catalog?.defaultDescription ?? "",
+      description: config.description?.trim() || config.defaultDescription?.trim() || catalog?.defaultDescription || config.label || catalog?.label || "Rental option",
       quantity,
       unitPriceAud: config.price,
       priceType,

@@ -1,7 +1,7 @@
 import { Prisma, RentalBookingStatus, RentalPaymentStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sendEmail } from "@/lib/email";
-import { siteConfig } from "@/data/services";
+import { getRentalBrand, resolveBookingRentalChannel } from "@/lib/rentals/rental-brand";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { format } from "date-fns";
 import { RentalUnavailableError } from "@/lib/rentals/rental-errors";
@@ -71,10 +71,12 @@ async function notifyRentalBookingCancelled(
     customerName: string | null;
     pickupAt: Date;
     dropoffAt: Date;
+    rentalChannel?: string | null;
     vehicle: { title: string | null; make: string; model: string; year: number; vehicleNumber: string | null };
   },
   reason: string
 ) {
+  const brand = getRentalBrand(resolveBookingRentalChannel(booking));
   const vehicleName = formatVehicleName(booking.vehicle);
   await sendEmail({
     to: booking.customerEmail,
@@ -88,8 +90,9 @@ async function notifyRentalBookingCancelled(
       `Dates: ${format(booking.pickupAt, "dd MMM yyyy, h:mm a")} to ${format(booking.dropoffAt, "dd MMM yyyy, h:mm a")}`,
       ``,
       `Please search for another vehicle or choose different dates.`,
-      siteConfig.name,
+      brand.name,
     ].join("\n"),
+    rentalChannel: brand.channel,
   });
 }
 

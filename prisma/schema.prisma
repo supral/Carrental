@@ -119,6 +119,11 @@ enum RentalPaymentStatus {
   REFUNDED
 }
 
+enum RentalChannel {
+  NB_AUTOMOTIVE
+  EVEREST
+}
+
 enum RentalOptionPriceType {
   PER_RENTAL
   PER_DAY
@@ -456,6 +461,7 @@ model RentalBooking {
   fleetVehicleId       String?
   fleetVehicle         FleetVehicle?       @relation(fields: [fleetVehicleId], references: [id], onDelete: SetNull)
   status               RentalBookingStatus @default(PENDING)
+  rentalChannel        RentalChannel?
   inventoryHeld        Boolean             @default(false)
   pickupAddress        String
   dropoffAddress       String

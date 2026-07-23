@@ -316,10 +316,8 @@ export async function createAdminRentalBooking(input: AdminCreateRentalBookingIn
   // ——— Cash / POS: mark paid immediately ———
   const booking = await createAndConfirmRentalBooking(bookingPayload);
 
-  const { sendRentalBookingConfirmationEmail } = await import(
-    "@/lib/rentals/rental-booking-email"
-  );
-  await sendRentalBookingConfirmationEmail(booking).catch(() => undefined);
+  const { sendPostRentalBookingEmails } = await import("@/lib/rentals/rental-workflow-emails");
+  await sendPostRentalBookingEmails(booking);
 
   if (agreementProvided) {
     const { applyAdminAssistedAgreement } = await import(

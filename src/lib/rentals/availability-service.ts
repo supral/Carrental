@@ -187,6 +187,7 @@ export async function createRentalBooking(input: CreateRentalBookingInput) {
         status: RentalBookingStatus.PENDING,
         paymentStatus: RentalPaymentStatus.UNPAID,
         paymentMethod: input.paymentMethod ?? null,
+        rentalChannel: "EVEREST",
       },
     });
   }, RENTAL_TRANSACTION_OPTIONS);
@@ -279,6 +280,7 @@ export async function createAndConfirmRentalBooking(input: CreateRentalBookingIn
         status: RentalBookingStatus.PENDING,
         paymentStatus: RentalPaymentStatus.UNPAID,
         paymentMethod: input.paymentMethod ?? null,
+        rentalChannel: "EVEREST",
       },
     });
 

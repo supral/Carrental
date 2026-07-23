@@ -1,10 +1,8 @@
 import { auth } from "@/lib/auth";
-import { redirect } from "next/navigation";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import AdminHeader from "@/components/admin/AdminHeader";
 import AdminProviders from "@/components/admin/AdminProviders";
 import { prisma } from "@/lib/prisma";
-import { processCompletedViewingFollowUps } from "@/lib/sales/viewing-follow-up";
 
 export const dynamic = "force-dynamic";
 
@@ -12,11 +10,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const session = await auth();
   if (!session?.user) return <>{children}</>;
 
-  await processCompletedViewingFollowUps().catch(() => {});
-
-  const notificationCount = await prisma.notification.count({
-    where: { userId: session.user.id, read: false },
-  }).catch(() => 0);
+  // Keep layout light — viewing follow-ups run via /api/cron/viewing-follow-ups, not every page.
+  const notificationCount = await prisma.notification
+    .count({
+      where: { userId: session.user.id, read: false },
+    })
+    .catch(() => 0);
 
   return (
     <AdminProviders>

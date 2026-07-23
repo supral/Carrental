@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { submitPublicRentalAgreementAction } from "@/lib/admin/rental-agreement-actions";
+import { getRentalBrand, resolveBookingRentalChannel } from "@/lib/rentals/rental-brand";
 import { LoadingLabel, LoadingOverlay } from "@/components/ui/loading";
 
 type DriverForm = {
@@ -58,12 +59,15 @@ type Props = {
   bookingId: string;
   token: string;
   vehicleLabel: string;
+  rentalChannel?: string | null;
   alreadyCompleted?: boolean;
   defaults?: {
     firstName?: string;
     lastName?: string;
     email?: string;
     phone?: string;
+    dob?: string;
+    address?: string;
   };
 };
 
@@ -80,9 +84,12 @@ export default function CustomerRentalAgreementForm({
   bookingId,
   token,
   vehicleLabel,
+  rentalChannel,
   alreadyCompleted,
   defaults,
 }: Props) {
+  const brand = getRentalBrand(resolveBookingRentalChannel({ rentalChannel }));
+  const { primary, accent, primaryLight } = brand.colors;
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [driverCount, setDriverCount] = useState(1);
@@ -93,6 +100,8 @@ export default function CustomerRentalAgreementForm({
       lastName: defaults?.lastName ?? "",
       email: defaults?.email ?? "",
       phone: defaults?.phone ?? "",
+      dob: defaults?.dob ?? "",
+      address: defaults?.address ?? "",
     },
   ]);
   const [terms, setTerms] = useState<Record<(typeof TERMS)[number]["key"], boolean>>({
@@ -175,13 +184,25 @@ export default function CustomerRentalAgreementForm({
           uploadingKey ? "Uploading licence..." : "Submitting rental agreement..."
         }
       />
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <h1 className="text-2xl font-bold tracking-tight">Digital Rental Agreement</h1>
-        <p className="mt-1 text-sm text-slate-600">Vehicle: {vehicleLabel}</p>
+      <div
+        className="rounded-2xl border bg-white p-5 shadow-sm"
+        style={{ borderColor: `${primary}40`, borderLeftWidth: 4, borderLeftColor: primary }}
+      >
+        <h1 className="text-2xl font-bold tracking-tight" style={{ color: accent }}>
+          Digital Rental Agreement
+        </h1>
+        <p className="mt-1 text-sm" style={{ color: primary }}>
+          {brand.name} · Vehicle: {vehicleLabel}
+        </p>
       </div>
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
-        <Label>Number of Drivers</Label>
+      <div
+        className="rounded-2xl border bg-white p-5 shadow-sm space-y-3"
+        style={{ borderColor: `${primary}30`, borderTopWidth: 3, borderTopColor: primary }}
+      >
+        <Label className="font-semibold" style={{ color: accent }}>
+          Number of Drivers
+        </Label>
         <div className="flex flex-wrap gap-2">
           {[1, 2, 3, 4].map((count) => (
             <Button
@@ -189,6 +210,12 @@ export default function CustomerRentalAgreementForm({
               type="button"
               variant={driverCount === count ? "default" : "outline"}
               onClick={() => setDriverCountSafe(count)}
+              className={driverCount === count ? "text-white" : ""}
+              style={
+                driverCount === count
+                  ? { backgroundColor: primary, borderColor: primary }
+                  : { borderColor: `${primary}66`, color: accent }
+              }
             >
               {count}
             </Button>
@@ -197,8 +224,12 @@ export default function CustomerRentalAgreementForm({
       </div>
 
       {drivers.map((driver, index) => (
-        <div key={index} className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-          <h2 className="text-lg font-semibold">
+        <div
+          key={index}
+          className="rounded-2xl border bg-white p-5 shadow-sm space-y-4"
+          style={{ borderColor: `${primary}25`, borderTopWidth: 3, borderTopColor: accent }}
+        >
+          <h2 className="text-lg font-semibold" style={{ color: accent }}>
             {index === 0 ? "Primary Driver" : `Additional Driver ${index}`}
           </h2>
           <div className="grid gap-4 sm:grid-cols-2">
@@ -357,9 +388,17 @@ export default function CustomerRentalAgreementForm({
         </div>
       ))}
 
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-        <h2 className="text-lg font-semibold">Rental Terms & Conditions</h2>
-        <div className="max-h-48 overflow-y-auto rounded-lg bg-slate-50 p-4 text-sm text-slate-700 space-y-2">
+      <div
+        className="rounded-2xl border bg-white p-5 shadow-sm space-y-4"
+        style={{ borderColor: `${primary}25`, borderTopWidth: 3, borderTopColor: primary }}
+      >
+        <h2 className="text-lg font-semibold" style={{ color: accent }}>
+          Rental Terms & Conditions
+        </h2>
+        <div
+          className="max-h-48 overflow-y-auto rounded-lg p-4 text-sm space-y-2"
+          style={{ backgroundColor: primaryLight, color: accent }}
+        >
           <p>
             The hirer agrees to the full rental terms including authorised drivers only, insurance
             excess liability, returning fuel at pickup level, excess kilometre charges, late return
@@ -390,7 +429,8 @@ export default function CustomerRentalAgreementForm({
       <Button
         type="submit"
         disabled={pending || uploadingKey !== null || !allTermsAccepted()}
-        className="w-full sm:w-auto"
+        className="w-full sm:w-auto text-white hover:opacity-90"
+        style={{ backgroundColor: primary }}
       >
         {pending ? <LoadingLabel label="Submitting..." /> : "Submit Rental Agreement"}
       </Button>

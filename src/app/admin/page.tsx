@@ -21,7 +21,8 @@ export default async function AdminDashboardPage() {
         <div>
           <h1 className="text-2xl font-bold">Dashboard Overview</h1>
           <p className="text-muted-foreground">
-            Today&apos;s rental movements and live operations snapshot.
+            Today&apos;s customers, fleet movements, and live operations. Charts and exports are in
+            Reports.
           </p>
         </div>
         <Button asChild variant="outline">

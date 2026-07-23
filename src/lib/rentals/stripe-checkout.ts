@@ -9,20 +9,20 @@ import { handleRentalBookingStatusChange } from "@/lib/rentals/rental-inventory-
 import { formatRentalPriceSummary } from "@/lib/rentals/pricing";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { parsePricedRentalOptionLines } from "@/lib/rentals/option-catalog";
-import { sendRentalBookingConfirmationEmail } from "@/lib/rentals/rental-booking-email";
+import { sendPostRentalBookingEmails } from "@/lib/rentals/rental-workflow-emails";
 
-/** Confirmation only — agreement request emails are sent manually at pickup via admin. */
-async function sendBookingConfirmationEmail(booking: {
-  id: string;
-  customerEmail: string | null;
-  customerName: string | null;
-  pickupAt: Date;
-  dropoffAt: Date;
-  [key: string]: unknown;
-}) {
-  await sendRentalBookingConfirmationEmail(booking as never).catch((error) => {
-    console.error("[rental-booking-email]", error);
-  });
+function stripeLineItemDescription(value: string | null | undefined, fallback: string): string {
+  const trimmed = value?.trim();
+  return trimmed || fallback;
+}
+
+function buildStripeProductData(name: string, description: string) {
+  const product: { name: string; description?: string } = { name };
+  const resolved = description.trim();
+  if (resolved) {
+    product.description = resolved;
+  }
+  return product;
 }
 
 export async function confirmRentalBookingWithoutPayment(bookingId: string) {
@@ -47,7 +47,7 @@ export async function confirmRentalBookingWithoutPayment(bookingId: string) {
   }
 
   if (!wasAlreadyPaid) {
-    await sendBookingConfirmationEmail(result.confirmed);
+    await sendPostRentalBookingEmails(result.confirmed);
   }
 
   return result.confirmed;
@@ -100,25 +100,33 @@ export async function createRentalCheckoutSession(
       price_data: {
         currency: booking.currency,
         unit_amount: booking.baseAmountCents,
-        product_data: {
-          name: `Vehicle Rental: ${vehicleName}`,
-          description: formatRentalPriceSummary(
-            booking.vehicle.price,
-            booking.rentalDays,
-            booking.baseAmountCents
-          ),
-        },
+        product_data: buildStripeProductData(
+          `Vehicle Rental: ${vehicleName}`,
+          stripeLineItemDescription(
+            formatRentalPriceSummary(
+              booking.vehicle.price,
+              booking.rentalDays,
+              booking.baseAmountCents
+            ),
+            `${booking.rentalDays} day rental for ${vehicleName}`
+          )
+        ),
       },
     },
-    ...optionLines.map((line) => ({
+    ...optionLines
+      .filter((line) => line.lineTotalCents > 0)
+      .map((line) => ({
       quantity: 1,
       price_data: {
         currency: booking.currency,
         unit_amount: line.lineTotalCents,
-        product_data: {
-          name: line.label,
-          description: `${line.quantity > 1 ? `${line.quantity} × ` : ""}${line.description}`,
-        },
+        product_data: buildStripeProductData(
+          line.label || "Rental option",
+          stripeLineItemDescription(
+            `${line.quantity > 1 ? `${line.quantity} × ` : ""}${line.description}`,
+            line.label || "Rental option"
+          )
+        ),
       },
     })),
   ];
@@ -129,10 +137,7 @@ export async function createRentalCheckoutSession(
       price_data: {
         currency: booking.currency,
         unit_amount: booking.taxAmountCents,
-        product_data: {
-          name: "Tax",
-          description: "GST / taxes",
-        },
+        product_data: buildStripeProductData("Tax", "GST / taxes"),
       },
     });
   }
@@ -223,7 +228,7 @@ export async function markRentalBookingPaid(sessionId: string) {
     );
   }
 
-  await sendBookingConfirmationEmail(result.confirmed);
+  await sendPostRentalBookingEmails(result.confirmed);
 
   return prisma.rentalBooking.update({
     where: { id: bookingId },
