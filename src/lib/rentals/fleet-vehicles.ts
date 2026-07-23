@@ -69,10 +69,17 @@ function escapeRegExp(value: string) {
  * Never reuses numbers from deleted units that still hold the high-water mark —
  * we only scan remaining rows; deleted suffixes can leave gaps by design.
  */
-export async function allocateNextFleetNumber(
+/**
+ * Allocate `count` sequential Fleet Numbers for a vehicle type in one pass.
+ * Avoids per-unit DB round-trips (critical for Neon/Vercel bulk creates).
+ */
+export async function allocateFleetNumberRange(
   vehicleId: string,
+  count: number,
   client: Prisma.TransactionClient | typeof prisma = prisma
-): Promise<string> {
+): Promise<string[]> {
+  if (count < 1) return [];
+
   const vehicle = await client.vehicle.findUnique({
     where: { id: vehicleId },
     select: { make: true, model: true, title: true },
@@ -80,27 +87,53 @@ export async function allocateNextFleetNumber(
   if (!vehicle) throw new Error("Vehicle type not found");
 
   const prefix = buildFleetNumberPrefix(vehicle);
-  const existing = await client.fleetVehicle.findMany({
-    where: { vehicleId },
-    select: { fleetNumber: true },
-  });
-
   const pattern = new RegExp(`^${escapeRegExp(prefix)}-(\\d+)$`, "i");
+
+  const [existingForType, existingWithPrefix] = await Promise.all([
+    client.fleetVehicle.findMany({
+      where: { vehicleId },
+      select: { fleetNumber: true },
+    }),
+    client.fleetVehicle.findMany({
+      where: { fleetNumber: { startsWith: `${prefix}-` } },
+      select: { fleetNumber: true },
+    }),
+  ]);
+
   let maxSeq = 0;
-  for (const row of existing) {
+  for (const row of existingForType) {
     const match = row.fleetNumber.match(pattern);
     if (match) {
       maxSeq = Math.max(maxSeq, Number.parseInt(match[1], 10));
     }
   }
 
+  const used = new Set(existingWithPrefix.map((row) => row.fleetNumber.toUpperCase()));
+  const allocated: string[] = [];
   let next = maxSeq + 1;
-  let candidate = `${prefix}-${String(next).padStart(3, "0")}`;
-  while (await client.fleetVehicle.findUnique({ where: { fleetNumber: candidate } })) {
+  const safetyLimit = maxSeq + count + 10_000;
+
+  while (allocated.length < count) {
+    if (next > safetyLimit) {
+      throw new Error("Could not allocate enough fleet numbers");
+    }
+    const candidate = `${prefix}-${String(next).padStart(3, "0")}`;
     next += 1;
-    candidate = `${prefix}-${String(next).padStart(3, "0")}`;
+    if (used.has(candidate.toUpperCase())) continue;
+    used.add(candidate.toUpperCase());
+    allocated.push(candidate);
   }
-  return candidate;
+
+  return allocated;
+}
+
+export async function allocateNextFleetNumber(
+  vehicleId: string,
+  client: Prisma.TransactionClient | typeof prisma = prisma
+): Promise<string> {
+  const [number] = await allocateFleetNumberRange(vehicleId, 1, client);
+  if (!number) throw new Error("Could not allocate fleet number");
+  return number;
 }
 
 export type FleetTypeStatusCounts = {
@@ -233,16 +266,16 @@ export async function ensureFleetUnitsForVehicle(
 
   if (bookable.length < target) {
     const toCreate = target - bookable.length;
-    for (let i = 0; i < toCreate; i++) {
-      const fleetNumber = await allocateNextFleetNumber(vehicleId, client);
-      await client.fleetVehicle.create({
-        data: {
+    const fleetNumbers = await allocateFleetNumberRange(vehicleId, toCreate, client);
+    if (fleetNumbers.length > 0) {
+      await client.fleetVehicle.createMany({
+        data: fleetNumbers.map((fleetNumber) => ({
           vehicleId,
           fleetNumber,
           color: vehicle.color,
           branch: vehicle.location,
           status: FleetVehicleStatus.AVAILABLE,
-        },
+        })),
       });
     }
   }
@@ -416,6 +449,71 @@ export async function createFleetVehicleRecord(input: CreateFleetVehicleInput) {
 
   await syncVehicleFleetCountsFromUnits(input.vehicleId);
   return created;
+}
+
+const BULK_CREATE_BATCH_SIZE = 100;
+
+/**
+ * Bulk-create physical fleet units with one number allocation + batched inserts.
+ * Designed for Neon/Vercel where per-row loops time out.
+ */
+export async function createFleetVehicleRecordsBulk(
+  input: CreateFleetVehicleInput,
+  unitCount: number
+): Promise<{ id: string; fleetNumbers: string[] }> {
+  const count = Math.max(1, Math.min(500, Math.floor(unitCount)));
+  if (count === 1) {
+    const created = await createFleetVehicleRecord(input);
+    return { id: created.id, fleetNumbers: [created.fleetNumber] };
+  }
+
+  const fleetNumbers = await allocateFleetNumberRange(input.vehicleId, count);
+  if (fleetNumbers.length !== count) {
+    throw new Error("Could not allocate fleet numbers for all units");
+  }
+
+  const make = input.make?.trim() || null;
+  const model = input.model?.trim() || null;
+  const year = input.year ?? null;
+  const color = input.color?.trim() || null;
+  const branch = input.branch?.trim() || null;
+  const notes = input.notes?.trim() || null;
+  const status = input.status ?? FleetVehicleStatus.AVAILABLE;
+  const purchaseDate = input.purchaseDate ?? null;
+  const purchaseCostCents = input.purchaseCostCents ?? null;
+
+  const rows = fleetNumbers.map((fleetNumber) => ({
+    vehicleId: input.vehicleId,
+    fleetNumber,
+    make,
+    model,
+    year,
+    color,
+    branch,
+    notes,
+    status,
+    purchaseDate,
+    purchaseCostCents,
+  }));
+
+  // Batched createMany — each INSERT is atomic; retry-safe because numbers advance.
+  for (let offset = 0; offset < rows.length; offset += BULK_CREATE_BATCH_SIZE) {
+    await prisma.fleetVehicle.createMany({
+      data: rows.slice(offset, offset + BULK_CREATE_BATCH_SIZE),
+    });
+  }
+
+  await syncVehicleFleetCountsFromUnits(input.vehicleId);
+
+  const first = await prisma.fleetVehicle.findFirst({
+    where: { vehicleId: input.vehicleId, fleetNumber: fleetNumbers[0] },
+    select: { id: true },
+  });
+  if (!first) {
+    throw new Error("Fleet units were created but could not be loaded");
+  }
+
+  return { id: first.id, fleetNumbers };
 }
 
 export async function updateFleetVehicleRecord(

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import {
   allocateNextFleetNumber,
   createFleetVehicleRecord,
+  createFleetVehicleRecordsBulk,
   deleteFleetVehicleRecord,
   getFleetTypeStatusCountsBatch,
   updateFleetVehicleRecord,
@@ -15,6 +16,9 @@ import {
 import { saveVehicleRentalOptionAssignments } from "@/lib/admin/rental-option-actions";
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { BLOCKING_RENTAL_STATUSES } from "@/lib/rentals/fleet-inventory";
+
+/** Bulk fleet creates (up to 500) need headroom on Vercel/Neon. */
+export const maxDuration = 60;
 
 async function requireFleetAdmin(manage = false) {
   const session = await auth();
@@ -239,31 +243,34 @@ export async function createFleetVehicle(input: FleetVehicleFormInput) {
       ? input.fleetNumber.trim()
       : undefined;
 
-  const createdNumbers: string[] = [];
-  let firstId = "";
+  const recordInput = {
+    vehicleId: input.vehicleId,
+    fleetNumber: fleetNumberOverride,
+    make: input.make,
+    model: input.model,
+    year: input.year,
+    // Per-unit identifiers only when adding a single car
+    registrationNumber: unitCount === 1 ? input.registrationNumber : undefined,
+    vinNumber: unitCount === 1 ? input.vinNumber : undefined,
+    engineNumber: unitCount === 1 ? input.engineNumber : undefined,
+    odometer: unitCount === 1 ? input.odometer ?? undefined : undefined,
+    color: input.color,
+    purchaseDate: input.purchaseDate ? new Date(input.purchaseDate) : null,
+    purchaseCostCents: input.purchaseCostCents ?? null,
+    branch: input.branch,
+    status: input.status,
+    notes: input.notes,
+  };
 
-  for (let i = 0; i < unitCount; i++) {
-    const created = await createFleetVehicleRecord({
-      vehicleId: input.vehicleId,
-      fleetNumber: i === 0 ? fleetNumberOverride : undefined,
-      make: input.make,
-      model: input.model,
-      year: input.year,
-      // Per-unit identifiers only when adding a single car
-      registrationNumber: unitCount === 1 ? input.registrationNumber : undefined,
-      vinNumber: unitCount === 1 ? input.vinNumber : undefined,
-      engineNumber: unitCount === 1 ? input.engineNumber : undefined,
-      odometer: unitCount === 1 ? input.odometer ?? undefined : undefined,
-      color: input.color,
-      purchaseDate: input.purchaseDate ? new Date(input.purchaseDate) : null,
-      purchaseCostCents: input.purchaseCostCents ?? null,
-      branch: input.branch,
-      status: input.status,
-      notes: input.notes,
-    });
-    if (!firstId) firstId = created.id;
-    createdNumbers.push(created.fleetNumber);
-  }
+  // Bulk path: one number allocation + batched createMany (Neon/Vercel safe).
+  // Single-unit path keeps override + rego/VIN/odometer support.
+  const created =
+    unitCount === 1
+      ? await createFleetVehicleRecord(recordInput).then((row) => ({
+          id: row.id,
+          fleetNumbers: [row.fleetNumber],
+        }))
+      : await createFleetVehicleRecordsBulk(recordInput, unitCount);
 
   if (input.rentalOptionIds) {
     await saveVehicleRentalOptionAssignments(input.vehicleId, input.rentalOptionIds);
@@ -274,10 +281,10 @@ export async function createFleetVehicle(input: FleetVehicleFormInput) {
   revalidatePath(`/admin/fleet/type/${input.vehicleId}`);
 
   return {
-    id: firstId,
-    fleetNumber: createdNumbers[0],
-    count: createdNumbers.length,
-    fleetNumbers: createdNumbers,
+    id: created.id,
+    fleetNumber: created.fleetNumbers[0],
+    count: created.fleetNumbers.length,
+    fleetNumbers: created.fleetNumbers,
   };
 }
 

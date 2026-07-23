@@ -7,6 +7,8 @@ import { listRentalOptions } from "@/lib/admin/rental-option-actions";
 import { isSuperAdmin } from "@/lib/admin/permissions";
 
 export const dynamic = "force-dynamic";
+/** Allow bulk createMany of up to 500 units on Vercel/Neon. */
+export const maxDuration = 60;
 
 export default async function AdminNewFleetVehiclePage({
   searchParams,
