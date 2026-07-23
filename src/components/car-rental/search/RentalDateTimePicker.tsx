@@ -230,10 +230,10 @@ export default function RentalDateTimePicker({
 
   if (inline) {
     return (
-      <>
+      <div className={cn("grid grid-cols-2 gap-3", className)}>
         {dateField}
         {timeField}
-      </>
+      </div>
     );
   }
 
