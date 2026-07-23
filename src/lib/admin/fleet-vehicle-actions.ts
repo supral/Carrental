@@ -17,9 +17,6 @@ import { saveVehicleRentalOptionAssignments } from "@/lib/admin/rental-option-ac
 import { formatVehicleName } from "@/lib/vehicles/display";
 import { BLOCKING_RENTAL_STATUSES } from "@/lib/rentals/fleet-inventory";
 
-/** Bulk fleet creates (up to 500) need headroom on Vercel/Neon. */
-export const maxDuration = 60;
-
 async function requireFleetAdmin(manage = false) {
   const session = await auth();
   if (!session?.user?.id) throw new Error("Unauthorized");
